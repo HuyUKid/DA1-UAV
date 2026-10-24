@@ -2,15 +2,32 @@
 
 Repository công khai: [HuyUKid/DA1-UAV](https://github.com/HuyUKid/DA1-UAV).
 
-Pi nhận lệnh console, gửi vị trí local NED qua MAVLink UART và giám sát
+Pi nhận lệnh console, gửi vị trí local NED qua MAVLink serial và giám sát
 trạng thái chuyến bay. Pixhawk/PX4 chạy estimator và toàn bộ vòng điều
 khiển vị trí, vận tốc, attitude, rate và motor.
 
+**Mô phỏng HITL:** Pi nối UART với TELEM2 của Pixhawk; máy tính mô phỏng
+nối USB với Pixhawk để trao đổi dữ liệu HIL.
+
 ```text
-Người vận hành → Pi/console → UART/TELEM2 → Pixhawk/PX4 → motor
-                                              ↕ USB, khi dùng HITL
-                                       PC khác/Gazebo Classic X500
+Pi/console ↔ UART ↔ TELEM2 Pixhawk/PX4 (SYS_HITL=1)
+                              ↕ USB / MAVLink HIL
+                       PC / Gazebo Classic X500
+                              ↕ UDP
+                       QGC / observer
 ```
+
+**Bay thật theo cách đấu nối của bạn:** Pi nối USB với cổng Type-C của
+Pixhawk; máy tính nối mạng với Pi và dùng UDP để trao đổi MAVLink.
+
+```text
+PC / QGroundControl ↔ UDP qua mạng ↔ Pi ↔ USB Type-C ↔ Pixhawk/PX4 → motor
+PC / terminal       ↔ SSH         ↔ Pi/console
+```
+
+Đường UDP cần dịch vụ chuyển tiếp MAVLink trên Pi, cấu hình riêng ngoài
+repository. Sơ đồ này mô tả cách kết nối thiết bị; xem giới hạn chia sẻ
+cổng USB ở phần dưới trước khi chạy QGC và console cùng lúc.
 
 ## Cấu trúc dự án
 
@@ -64,16 +81,57 @@ Pi ARM64, xem [build MAVSDK](docs/FLIGHT_STATES.md#native-mavsdk-trên-pi).
 
 ## Kết nối và tham số
 
+### HITL: Pi ↔ TELEM2, PC ↔ USB Pixhawk
+
 Nối UART Pi với TELEM2: TX↔RX, RX↔TX, GND, đúng mức logic theo bo.
-Cổng Linux/baud phải khớp cấu hình thực, chỉ một tiến trình giữ cổng.
-Ví dụ hiện dùng `/dev/ttyAMA0:921600` và MAVLink instance 1 trên TELEM2.
+Cổng Linux/baud phải khớp cấu hình thực. Ví dụ hiện dùng
+`serial:///dev/ttyAMA0:921600` và MAVLink instance 1 trên TELEM2.
+USB Pixhawk nối PC chạy Gazebo, không nối Pi trong sơ đồ HITL này.
+QGC nhận UDP từ simulator; quy trình đầy đủ ở
+[hướng dẫn mô phỏng](simulation/docs/SETUP.md).
+
+### Bay thật: Pi ↔ USB Type-C Pixhawk, PC ↔ UDP Pi
+
+Dùng cáp USB truyền dữ liệu từ Pi tới cổng Type-C của Pixhawk. Trên Pi,
+kiểm tra tên cổng sau khi cắm:
+
+```bash
+ls -l /dev/serial/by-id/
+```
+
+USB serial thường xuất hiện dưới tên `/dev/ttyACM0`; phải dùng tên thực
+tế trên Pi, ưu tiên đường dẫn ổn định `/dev/serial/by-id/...` khi có.
+Console hiện nhận URI `serial:///dev/DEVICE:BAUD`, nên có thể dùng USB
+serial mà không đổi code. Các ví dụ bay thật bên dưới dùng
+`serial:///dev/ttyACM0:921600`; đây không còn là UART GPIO `/dev/ttyAMA0`.
+
+UDP là đường MAVLink giữa QGC trên PC và dịch vụ chuyển tiếp trên Pi,
+chẳng hạn MAVLink Router. Dự án chưa kèm dịch vụ/cấu hình này và chưa
+nhận các chuỗi lệnh `arm`, `fly`, `land` qua UDP. Để nhập những lệnh đó,
+SSH vào Pi rồi chạy console. Tham khảo
+[kiến trúc companion của PX4](https://docs.px4.io/main/en/companion_computer/index).
+
+Chỉ một tiến trình được giữ cổng USB Pixhawk. Lệnh console nối trực tiếp
+USB ở dưới dùng khi router không giữ cổng đó. Nếu router đang giữ USB để
+phục vụ QGC qua UDP, không chạy thêm console mở cùng USB: cần cấu hình
+router cấp một cổng serial ảo riêng cho console, hoặc bổ sung hỗ trợ
+console kết nối router qua UDP. Repository hiện chưa triển khai hai cách
+chia sẻ này; không thay `--connection` bằng URI UDP vì validator hiện chỉ
+nhận serial. Đường QGC qua UDP và console qua USB chưa được kiểm chứng
+chạy đồng thời trong cấu hình này.
+
+### Profile và phạm vi file tham số
 
 | Môi trường | Profile console | `SYS_HITL` | File cấu hình tham khảo |
 |---|---|---:|---|
-| UAV thật | `hardware` | 0 | `controller/params/hardware.params` |
+| UAV thật, Pi nối USB | `hardware` | 0 | `controller/params/hardware.params`: có `SYS_HITL=0`, phần giao tiếp còn lại dành cho TELEM2, không phải USB |
 | Gazebo HITL, Pixhawk thật | `hitl` | 1 | `simulation/params/x500_hitl.params` |
 
 Hai file là overlay tối thiểu, không phải bản cấu hình đầy đủ của UAV.
+Không import toàn bộ `hardware.params` với mục đích cấu hình USB: các
+dòng MAVLink instance 1/TELEM2 trong file không cấu hình đường USB đang
+dùng. Kiểm tra MAVLink USB trên firmware thực tế của Pixhawk trong QGC;
+profile `hardware` chỉ kiểm tra `SYS_HITL=0`, không tự ghi tham số.
 Với TX/RX/GND, `MAV_1_FLOW_CTRL=0` tắt RTS/CTS; `2` là auto-detect.
 Sao lưu tham số, đối chiếu firmware/cổng/wiring trong QGC trước khi import
 và reboot sau thay cấu hình serial/HITL. [Tham chiếu PX4](https://docs.px4.io/v1.17/en/advanced_config/parameter_reference#MAV_1_FLOW_CTRL).
@@ -89,12 +147,18 @@ khỏi file overlay không xóa giá trị đã được nạp trước đó tr�
 
 ## Chạy console
 
-Các lệnh trong phần này chạy trên Pi từ `~/uav/controller`:
+Các lệnh trong phần này chạy trên Pi từ `~/uav/controller`, trực tiếp
+hoặc qua SSH từ PC. Ví dụ cho bay thật, Pi đang giữ trực tiếp cổng USB
+Pixhawk và không có router/tiến trình khác giữ cổng đó:
 
 ```bash
 .venv/bin/python pi/console.py --profile hardware \
-  --connection serial:///dev/ttyAMA0:921600 --check
+  --connection serial:///dev/ttyACM0:921600 --check
 ```
+
+Thay `/dev/ttyACM0` bằng thiết bị USB thực tế. Với HITL, dùng
+`--profile hitl --connection serial:///dev/ttyAMA0:921600` vì Pi nối
+TELEM2, còn USB Pixhawk do PC mô phỏng sử dụng.
 
 `--check` chỉ đọc trạng thái. Trước ARM cần kết nối tốt, IDLE, disarmed,
 ON_GROUND, telemetry mới, health/preflight đạt và không có termination.
@@ -105,7 +169,7 @@ Khi đã chuẩn bị đúng thiết bị và môi trường, bật quyền đi�
 
 ```bash
 .venv/bin/python pi/console.py --profile hardware \
-  --connection serial:///dev/ttyAMA0:921600 \
+  --connection serial:///dev/ttyACM0:921600 \
   --height 2 --xy-tolerance 0.5 --z-tolerance 0.3 \
   --yaw-tolerance 10 --settle-time 2 --target-timeout 60 \
   --enable-actuation

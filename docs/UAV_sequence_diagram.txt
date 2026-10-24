@@ -1,0 +1,87 @@
+title UAV local NED — Pi giám sát FSM, Pixhawk điều khiển
+
+participant Người_vận_hành
+participant Pi
+participant PX4
+
+note over Pi,PX4: PX4 chạy EKF và mọi vòng điều khiển position/velocity/attitude/rate/motor.
+note over Pi: Pi quản lý trạng thái, khóa mục tiêu và giám sát vị trí/yaw + dwell. Không PID, không tạo setpoint vận tốc.
+note over Pi,PX4: Offboard chuẩn không phát ACK tới đích; target_reached là kết quả giám sát Pi, không phải PX4 waypoint ACK.
+note over Pi,PX4: Console dùng local NED: x Bắc/y Đông theo mét; z hướng xuống.
+
+Pi->>PX4: Kết nối, đọc SYS_HITL và NAV_MIN_LTR_ALT
+PX4-->>Pi: Telemetry mới, health, mode, armed, landed_state
+
+alt Chỉ thử motor trên đất, đã tháo cánh
+    Người_vận_hành->>Pi: arm
+    Pi->>Pi: Kiểm tra IDLE/disarmed/ON_GROUND, health và dữ liệu mới
+    Pi->>PX4: ARM, không tạo Offboard/setpoint cất cánh
+    PX4-->>Pi: ACK; sau đó telemetry armed=true
+    Pi->>Pi: ARMED chỉ khi có trạng thái mới xác nhận
+    Người_vận_hành->>Pi: disarm
+    Pi->>PX4: Dừng motor cưỡng bức, gửi trước mọi teardown
+    PX4-->>Pi: ACK; sau đó armed=false
+    Pi->>Pi: IDLE khi armed=false + ON_GROUND mới
+    note over Pi,PX4: Chỉ một lệnh DISARM cả dưới đất/trên không, nội bộ API force-stop.
+else TAKEOFF
+    Người_vận_hành->>Pi: takeoff
+    Pi->>Pi: Chụp local NED; giữ x/y; z_target=z_launch-height
+    Pi->>PX4: Prestream >1 s, ARM nếu chưa ARM, OFFBOARD
+    PX4-->>Pi: ACK và telemetry ARMED/OFFBOARD mới
+    Pi->>Pi: TAKEOFF; khóa đích, không coi ACK là đã lên cao
+end
+
+loop Khi TAKEOFF hoặc FLY
+    PX4->>PX4: EKF, tính sai lệch, điều khiển và giữ đích
+    Pi->>PX4: MAVSDK duy trì phát cùng position setpoint + yaw
+    PX4-->>Pi: Position, yaw, mode, armed, landed_state
+    alt Mất kết nối hoặc PX4/phi công đổi mode ngoài ý muốn
+        Pi->>Pi: Chốt EXTERNAL, ngừng stream; không tự ARM/restart khi nối lại
+    else Dữ liệu cũ/NaN/Inf/gap quá lớn hoặc ra ngoài ngưỡng
+        Pi->>Pi: Xóa dwell; giữ khóa đích
+    else IN_AIR, OFFBOARD, vị trí/yaw trong ngưỡng
+        Pi->>Pi: SETTLING, tích lũy dwell theo các mẫu mới
+        alt Đủ dwell
+            Pi->>PX4: Action.hold(), chuyển native PX4 HOLD
+            PX4-->>Pi: ACK; sau đó telemetry HOLD mới
+            Pi->>Pi: HOLD; ghi target_reached; TAKEOFF hoàn tất nếu đúng thao tác
+        end
+    end
+    alt Target quá hạn
+        Pi->>PX4: Yêu cầu HOLD, không báo hoàn thành đích
+    end
+end
+
+note over Pi,PX4: HOLD vô thời hạn đến lệnh mới. NAV_MIN_LTR_ALT có thể buộc nâng cao; Pi chặn nguy cơ nâng không mong muốn và yêu cầu LAND.
+
+loop Trong HOLD
+    PX4->>PX4: Phanh và giữ vị trí bằng native Hold; không cần setpoint Offboard
+    Người_vận_hành->>Pi: Lệnh mới
+    alt Chỉ nhập x y khi chưa chọn FLY
+        Pi-->>Người_vận_hành: Từ chối; HOLD khóa tọa độ
+    else fly rồi x y, hoặc fly x y
+        Pi->>Pi: Yêu cầu TAKEOFF hoàn tất, mode HOLD mới, health tốt
+        Pi->>PX4: Setpoint mới, prestream, OFFBOARD; không ARM lại
+        Pi->>Pi: FLY; khóa thay đích đến HOLD tiếp theo
+    end
+end
+
+alt LAND, ưu tiên qua khóa đích khi console nhận lệnh
+    Người_vận_hành->>Pi: land
+    Pi->>Pi: Ghi bối cảnh: phase/mode/armed/landed_state/plugin
+    Pi->>PX4: MAV_CMD_NAV_LAND trước mọi teardown, giữ SDK và plugin sống
+    PX4-->>Pi: ACK hoặc từ chối/timeout
+    note over Pi,PX4: Cùng hàm gửi khi ARM trên đất và khi bay; trạng thái thực và tải khác nhau, không bảo đảm bài thử trên đất tái hiện lỗi khi bay.
+    PX4->>PX4: Khi bay và nhận LAND, điều khiển hạ cánh, nhận biết chạm đất
+    PX4-->>Pi: LAND, ON_GROUND, armed=false mới
+    Pi->>Pi: IDLE; giữ phiên và plugin đến exit/lần TAKEOFF tường minh tiếp theo
+else DISARM, ưu tiên qua khóa đích khi console nhận lệnh
+    Người_vận_hành->>Pi: disarm
+    Pi->>PX4: Force motor stop; không chờ điều kiện mặt đất/vị trí
+    PX4-->>Pi: ACK; sau đó telemetry armed=false
+    note over Người_vận_hành,PX4: DISARM trên không có thể làm UAV rơi; khác với LAND.
+end
+
+note over Pi,PX4: HOLD bị từ chối hoặc quá hạn xác nhận: yêu cầu LAND một lần, ghi lỗi; không retry/tự giành lại quyền.
+note over PX4: Mất liên kết thật, pin, geofence và emergency do PX4 xử lý theo failsafe cấu hình trên bo.
+note over Pi: Log/fault log/boot ID và diagnose_pi dùng điều tra Pi đèn đỏ/mất Wi-Fi. Không kết luận phần cứng tốt từ unit test.

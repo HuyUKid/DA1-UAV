@@ -1,0 +1,41 @@
+{
+  "px4_path": "/home/lacais/PX4-Autopilot-v1.16",
+  "gz_models_revision": "e05f4312d3f28aa621157610584a4870406cb6d3",
+  "classic_revision": "70683dc759cbd3ebccfa78429b564f8b1fb5d149",
+  "serial_device": "/dev/serial/by-id/usb-Auterion_PX4_FMU_v6C.x_0-if00",
+  "baud": 921600,
+  "source_sha256": {
+    "Tools/simulation/gz/models/x500_base/model.sdf": "d97e53de8c50f167b0b3a4f86dc21413236387f7b72cb817549362b63534e83c",
+    "Tools/simulation/gz/models/x500/model.sdf": "76d8668c9c1a10348f9b7011d892203f319e5051dc8c0eb06c62e52db8e6714e",
+    "Tools/simulation/gazebo-classic/sitl_gazebo-classic/models/iris_hitl/iris_hitl.sdf": "af94ac608c7fd56423c7ff08abe9bf86fc2013fd87b64592181294eb452884e0"
+  },
+  "imu_noise_mapping": {
+    "gyro_std_rad_s": 0.0008726646,
+    "accel_std_m_s2_isotropic_max": 0.00686,
+    "rate_hz": 250.0,
+    "turn_on_bias": 0
+  },
+  "body_mass_kg": 2.0,
+  "total_link_mass_kg": 2.0893076923076914,
+  "limitations": [
+    "Classic sensor models replace GZ sensors",
+    "PBR removed for Classic renderer",
+    "Model parameters represent upstream x500, not measured user airframe",
+    "Hardware flight not certified by model generation"
+  ],
+  "port_adjustments": [
+    "Inline ground plane and sun; no remote world model dependencies",
+    "Replace placeholder GPS material with explicit colours"
+  ],
+  "upstream_review_2026_10_24": {
+    "x500_base_recorded_sha256_matches_upstream": true,
+    "x500_motor_recorded_sha256_matches_upstream": true,
+    "classic_iris_recorded_sha256_matches_upstream": false,
+    "classic_iris_upstream_sha256": "eb1a29420fe0f8df9b8682357483771f70bab60d751fb66b70343e071a8b743c",
+    "model_rebuilt_from_pinned_sources_structurally_matches_bundled_model": true,
+    "source_total_link_mass_kg": 2.0643076923076924,
+    "added_classic_sensor_link_mass_kg": 0.025,
+    "scope": "Source/model structure comparison only; not runtime dynamics or hardware validation",
+    "note": "Historical bridge source hash retained unchanged; cause of its byte-level mismatch is unknown."
+  }
+}

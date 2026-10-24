@@ -1,0 +1,1562 @@
+[
+  {
+    "file": "log_100_2026-10-24-08-59-04.ulg",
+    "firmware_branch": "release/1.17",
+    "duration_s": 11.9958,
+    "parameters": {
+      "SYS_HITL": 0,
+      "COM_OF_LOSS_T": 1.0,
+      "COM_OBL_RC_ACT": 0,
+      "COM_RCL_EXCEPT": 0,
+      "NAV_RCL_ACT": 2,
+      "MPC_THR_HOVER": 0.5,
+      "EKF2_HGT_REF": 1,
+      "BAT1_N_CELLS": 6,
+      "CBRK_IO_SAFETY": 22027,
+      "COM_PREARM_MODE": 0,
+      "COM_MOT_TEST_EN": 1,
+      "SYS_AUTOSTART": 4001,
+      "PWM_AUX_FUNC1": 101,
+      "PWM_AUX_FUNC2": 102,
+      "PWM_AUX_FUNC3": 103,
+      "PWM_AUX_FUNC4": 104,
+      "PWM_AUX_DIS1": 1000,
+      "PWM_AUX_DIS2": 1000,
+      "PWM_AUX_DIS3": 1000,
+      "PWM_AUX_DIS4": 1000,
+      "PWM_AUX_MIN1": 1100,
+      "PWM_AUX_MIN2": 1100,
+      "PWM_AUX_MIN3": 1100,
+      "PWM_AUX_MIN4": 1100
+    },
+    "gps": {
+      "fix_type": [
+        3.0,
+        3.0
+      ],
+      "satellites_used": [
+        25.0,
+        29.0
+      ],
+      "eph": [
+        0.4,
+        0.459
+      ],
+      "epv": [
+        0.749,
+        0.876
+      ],
+      "jamming_state": [
+        1.0,
+        2.0
+      ]
+    },
+    "initial_local_xyz_m": [
+      0.564,
+      -1.9342,
+      -1.1251
+    ],
+    "old_target_minus2_climb_from_initial_m": 0.8749,
+    "local_valid": {
+      "xy_valid": [
+        1.0,
+        1.0
+      ],
+      "z_valid": [
+        1.0,
+        1.0
+      ]
+    },
+    "local_reset_counters": {
+      "xy_reset_counter": [
+        4.0,
+        5.0
+      ],
+      "z_reset_counter": [
+        3.0,
+        3.0
+      ]
+    },
+    "last_offboard_message_s": 3.1813,
+    "first_offboard_lost_s": 4.2106,
+    "nav_state_changes": [
+      {
+        "t_s": 0.0335,
+        "value": 14
+      },
+      {
+        "t_s": 4.2216,
+        "value": 5
+      },
+      {
+        "t_s": 11.0001,
+        "value": 14
+      }
+    ],
+    "failsafe_changes": [
+      {
+        "t_s": 0.0335,
+        "value": 0
+      },
+      {
+        "t_s": 4.2216,
+        "value": 1
+      },
+      {
+        "t_s": 11.0001,
+        "value": 0
+      }
+    ],
+    "estimator_checks": [
+      {
+        "instance": 0,
+        "gps_check_fail_flags": [
+          0.0,
+          0.0
+        ],
+        "filter_fault_flags": [
+          0.0,
+          0.0
+        ]
+      },
+      {
+        "instance": 1,
+        "gps_check_fail_flags": [
+          0.0,
+          0.0
+        ],
+        "filter_fault_flags": [
+          0.0,
+          0.0
+        ]
+      }
+    ],
+    "imu_clipping_max_per_axis": [
+      {
+        "instance": 0,
+        "max": [
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "instance": 1,
+        "max": [
+          40,
+          3,
+          2
+        ]
+      }
+    ],
+    "horizontal_tracking": {
+      "offboard_until_last_received_setpoint": {
+        "sample_count": 33,
+        "max_estimated_xy_tracking_error_m": 0.0902,
+        "at_s": 2.2611,
+        "estimated_xy_m": [
+          0.5741,
+          -1.9937
+        ],
+        "target_xy_m": [
+          0.5645,
+          -1.9041
+        ],
+        "axis_tracking": {
+          "x": {
+            "max_abs_error_m": 0.0549,
+            "signed_error_at_max_m": -0.0549,
+            "at_s": 2.9554,
+            "target_min_max_m": [
+              0.5638,
+              0.5645
+            ],
+            "first_abs_error_over_0_5m_s": null
+          },
+          "y": {
+            "max_abs_error_m": 0.0896,
+            "signed_error_at_max_m": -0.0896,
+            "at_s": 2.2611,
+            "target_min_max_m": [
+              -1.9328,
+              -1.9041
+            ],
+            "first_abs_error_over_0_5m_s": null
+          }
+        }
+      },
+      "all_offboard_samples": {
+        "sample_count": 53,
+        "max_estimated_xy_tracking_error_m": 0.4754,
+        "at_s": 4.1555,
+        "estimated_xy_m": [
+          0.9122,
+          -1.5798
+        ],
+        "target_xy_m": [
+          0.5645,
+          -1.9041
+        ],
+        "axis_tracking": {
+          "x": {
+            "max_abs_error_m": 0.3477,
+            "signed_error_at_max_m": 0.3477,
+            "at_s": 4.1555,
+            "target_min_max_m": [
+              -1.2492,
+              0.5645
+            ],
+            "first_abs_error_over_0_5m_s": null
+          },
+          "y": {
+            "max_abs_error_m": 0.3242,
+            "signed_error_at_max_m": 0.3242,
+            "at_s": 4.1555,
+            "target_min_max_m": [
+              -1.9328,
+              4.5304
+            ],
+            "first_abs_error_over_0_5m_s": null
+          }
+        }
+      },
+      "rtl_samples": {
+        "sample_count": 68,
+        "max_estimated_xy_tracking_error_m": 3.7755,
+        "at_s": 6.556,
+        "estimated_xy_m": [
+          0.3601,
+          2.1234
+        ],
+        "target_xy_m": [
+          0.7366,
+          -1.6333
+        ],
+        "axis_tracking": {
+          "x": {
+            "max_abs_error_m": 0.6305,
+            "signed_error_at_max_m": -0.6305,
+            "at_s": 7.1609,
+            "target_min_max_m": [
+              -1.2365,
+              0.9342
+            ],
+            "first_abs_error_over_0_5m_s": 5.2565
+          },
+          "y": {
+            "max_abs_error_m": 3.7567,
+            "signed_error_at_max_m": 3.7567,
+            "at_s": 6.556,
+            "target_min_max_m": [
+              -1.6333,
+              4.5133
+            ],
+            "first_abs_error_over_0_5m_s": 4.959
+          }
+        }
+      },
+      "resets": [
+        {
+          "counter": "xy_reset_counter",
+          "at_s": 6.556,
+          "delta": {
+            "delta_xy[0]": 0.0073,
+            "delta_xy[1]": 1.6297
+          }
+        },
+        {
+          "counter": "heading_reset_counter",
+          "at_s": 6.556,
+          "delta": {
+            "delta_heading": -1.371
+          }
+        }
+      ],
+      "note": "Estimator position versus most recent logged trajectory setpoint, matched by preceding timestamp; not independent ground truth. RTL targets differ from the takeoff hold target."
+    },
+    "messages": [
+      {
+        "t_s": -0.0075,
+        "text": "[commander] Armed by external command"
+      },
+      {
+        "t_s": -0.0041,
+        "text": "[logger] Start file log (type: full)"
+      },
+      {
+        "t_s": -0.0028,
+        "text": "[logger] [logger] /fs/microsd/log/2026-10-24/01_58_53.ulg"
+      },
+      {
+        "t_s": -0.0,
+        "text": "[logger] Opened full log file: /fs/microsd/log/2026-10-24/01_58_53.ulg"
+      },
+      {
+        "t_s": 1.8348,
+        "text": "[commander] Takeoff detected"
+      },
+      {
+        "t_s": 4.2214,
+        "text": "[failsafe] Failsafe activated"
+      },
+      {
+        "t_s": 4.2749,
+        "text": "[navigator] RTL: start return at 20 m (2 m above destination)"
+      },
+      {
+        "t_s": 4.4237,
+        "text": "[navigator] RTL: land at destination"
+      },
+      {
+        "t_s": 6.5317,
+        "text": "[health_and_arming_checks] Compass needs calibration - Land now!"
+      },
+      {
+        "t_s": 8.6216,
+        "text": "[health_and_arming_checks] Compass needs calibration - Land now!"
+      },
+      {
+        "t_s": 8.6218,
+        "text": "[health_and_arming_checks] Preflight Fail: Compass 0 fault"
+      },
+      {
+        "t_s": 8.9953,
+        "text": "[commander] Landing detected"
+      },
+      {
+        "t_s": 9.5024,
+        "text": "[commander] Connection to mission computer lost"
+      },
+      {
+        "t_s": 10.9999,
+        "text": "[commander] Disarmed by landing"
+      },
+      {
+        "t_s": 11.0045,
+        "text": "[vehicle_imu] ACC 1 (2490378) offset committed: [0.041 0.026 0.021]->[0.038 0.023 -0.028])"
+      },
+      {
+        "t_s": 11.2747,
+        "text": "[mavlink] exiting channel 1"
+      }
+    ],
+    "motor_commands_before_offboard_loss": [
+      {
+        "motor_number": 1,
+        "normalized_command_range": [
+          0.1286,
+          0.4038
+        ],
+        "first_command_ge_0_99_s": null
+      },
+      {
+        "motor_number": 2,
+        "normalized_command_range": [
+          0.2602,
+          0.4192
+        ],
+        "first_command_ge_0_99_s": null
+      },
+      {
+        "motor_number": 3,
+        "normalized_command_range": [
+          0.1959,
+          0.5673
+        ],
+        "first_command_ge_0_99_s": null
+      },
+      {
+        "motor_number": 4,
+        "normalized_command_range": [
+          0.2256,
+          0.5265
+        ],
+        "first_command_ge_0_99_s": null
+      }
+    ]
+  },
+  {
+    "file": "log_101_2026-10-24-09-03-14.ulg",
+    "firmware_branch": "release/1.17",
+    "duration_s": 16.6845,
+    "parameters": {
+      "SYS_HITL": 0,
+      "COM_OF_LOSS_T": 1.0,
+      "COM_OBL_RC_ACT": 0,
+      "COM_RCL_EXCEPT": 0,
+      "NAV_RCL_ACT": 2,
+      "MPC_THR_HOVER": 0.5,
+      "EKF2_HGT_REF": 1,
+      "BAT1_N_CELLS": 6,
+      "CBRK_IO_SAFETY": 22027,
+      "COM_PREARM_MODE": 0,
+      "COM_MOT_TEST_EN": 1,
+      "SYS_AUTOSTART": 4001,
+      "PWM_AUX_FUNC1": 101,
+      "PWM_AUX_FUNC2": 102,
+      "PWM_AUX_FUNC3": 103,
+      "PWM_AUX_FUNC4": 104,
+      "PWM_AUX_DIS1": 1000,
+      "PWM_AUX_DIS2": 1000,
+      "PWM_AUX_DIS3": 1000,
+      "PWM_AUX_DIS4": 1000,
+      "PWM_AUX_MIN1": 1100,
+      "PWM_AUX_MIN2": 1100,
+      "PWM_AUX_MIN3": 1100,
+      "PWM_AUX_MIN4": 1100
+    },
+    "gps": {
+      "fix_type": [
+        3.0,
+        3.0
+      ],
+      "satellites_used": [
+        23.0,
+        30.0
+      ],
+      "eph": [
+        0.345,
+        0.392
+      ],
+      "epv": [
+        0.698,
+        0.802
+      ],
+      "jamming_state": [
+        1.0,
+        2.0
+      ]
+    },
+    "initial_local_xyz_m": [
+      -0.171,
+      2.6011,
+      4.3849
+    ],
+    "old_target_minus2_climb_from_initial_m": 6.3849,
+    "local_valid": {
+      "xy_valid": [
+        1.0,
+        1.0
+      ],
+      "z_valid": [
+        1.0,
+        1.0
+      ]
+    },
+    "local_reset_counters": {
+      "xy_reset_counter": [
+        3.0,
+        5.0
+      ],
+      "z_reset_counter": [
+        2.0,
+        3.0
+      ]
+    },
+    "last_offboard_message_s": 2.7912,
+    "first_offboard_lost_s": 3.8705,
+    "nav_state_changes": [
+      {
+        "t_s": 0.0343,
+        "value": 14
+      },
+      {
+        "t_s": 3.8813,
+        "value": 5
+      },
+      {
+        "t_s": 15.6857,
+        "value": 14
+      }
+    ],
+    "failsafe_changes": [
+      {
+        "t_s": 0.0343,
+        "value": 0
+      },
+      {
+        "t_s": 3.8813,
+        "value": 1
+      },
+      {
+        "t_s": 15.6857,
+        "value": 0
+      }
+    ],
+    "estimator_checks": [
+      {
+        "instance": 0,
+        "gps_check_fail_flags": [
+          0.0,
+          0.0
+        ],
+        "filter_fault_flags": [
+          0.0,
+          0.0
+        ]
+      },
+      {
+        "instance": 1,
+        "gps_check_fail_flags": [
+          0.0,
+          0.0
+        ],
+        "filter_fault_flags": [
+          0.0,
+          0.0
+        ]
+      }
+    ],
+    "imu_clipping_max_per_axis": [
+      {
+        "instance": 0,
+        "max": [
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "instance": 1,
+        "max": [
+          185,
+          33,
+          17
+        ]
+      }
+    ],
+    "horizontal_tracking": {
+      "offboard_until_last_received_setpoint": {
+        "sample_count": 29,
+        "max_estimated_xy_tracking_error_m": 0.1054,
+        "at_s": 2.0522,
+        "estimated_xy_m": [
+          -0.1775,
+          2.5294
+        ],
+        "target_xy_m": [
+          -0.1827,
+          2.6347
+        ],
+        "axis_tracking": {
+          "x": {
+            "max_abs_error_m": 0.022,
+            "signed_error_at_max_m": 0.022,
+            "at_s": 2.7563,
+            "target_min_max_m": [
+              -0.1827,
+              -0.1827
+            ],
+            "first_abs_error_over_0_5m_s": null
+          },
+          "y": {
+            "max_abs_error_m": 0.1053,
+            "signed_error_at_max_m": -0.1053,
+            "at_s": 2.0522,
+            "target_min_max_m": [
+              2.6347,
+              2.6347
+            ],
+            "first_abs_error_over_0_5m_s": null
+          }
+        }
+      },
+      "all_offboard_samples": {
+        "sample_count": 50,
+        "max_estimated_xy_tracking_error_m": 0.4351,
+        "at_s": 3.8647,
+        "estimated_xy_m": [
+          0.1953,
+          2.4191
+        ],
+        "target_xy_m": [
+          -0.1827,
+          2.6347
+        ],
+        "axis_tracking": {
+          "x": {
+            "max_abs_error_m": 0.378,
+            "signed_error_at_max_m": 0.378,
+            "at_s": 3.8647,
+            "target_min_max_m": [
+              -0.1827,
+              0.6194
+            ],
+            "first_abs_error_over_0_5m_s": null
+          },
+          "y": {
+            "max_abs_error_m": 0.2156,
+            "signed_error_at_max_m": -0.2156,
+            "at_s": 3.8647,
+            "target_min_max_m": [
+              2.6347,
+              3.6416
+            ],
+            "first_abs_error_over_0_5m_s": null
+          }
+        }
+      },
+      "rtl_samples": {
+        "sample_count": 118,
+        "max_estimated_xy_tracking_error_m": 3.2046,
+        "at_s": 6.6567,
+        "estimated_xy_m": [
+          5.8146,
+          2.7986
+        ],
+        "target_xy_m": [
+          2.6118,
+          2.6901
+        ],
+        "axis_tracking": {
+          "x": {
+            "max_abs_error_m": 3.2028,
+            "signed_error_at_max_m": 3.2028,
+            "at_s": 6.6567,
+            "target_min_max_m": [
+              0.1484,
+              7.3172
+            ],
+            "first_abs_error_over_0_5m_s": 4.6588
+          },
+          "y": {
+            "max_abs_error_m": 1.1359,
+            "signed_error_at_max_m": 1.1359,
+            "at_s": 13.8576,
+            "target_min_max_m": [
+              2.2001,
+              3.735
+            ],
+            "first_abs_error_over_0_5m_s": 4.8514
+          }
+        }
+      },
+      "resets": [
+        {
+          "counter": "heading_reset_counter",
+          "at_s": 4.0542,
+          "delta": {
+            "delta_heading": 0.1558
+          }
+        },
+        {
+          "counter": "xy_reset_counter",
+          "at_s": 5.864,
+          "delta": {
+            "delta_xy[0]": 0.6234,
+            "delta_xy[1]": 0.0253
+          }
+        },
+        {
+          "counter": "heading_reset_counter",
+          "at_s": 5.864,
+          "delta": {
+            "delta_heading": -0.2602
+          }
+        },
+        {
+          "counter": "z_reset_counter",
+          "at_s": 5.864,
+          "delta": {
+            "delta_z": 0.1225
+          }
+        },
+        {
+          "counter": "xy_reset_counter",
+          "at_s": 6.5575,
+          "delta": {
+            "delta_xy[0]": 1.6809,
+            "delta_xy[1]": -0.3008
+          }
+        },
+        {
+          "counter": "heading_reset_counter",
+          "at_s": 6.5575,
+          "delta": {
+            "delta_heading": -1.2485
+          }
+        }
+      ],
+      "note": "Estimator position versus most recent logged trajectory setpoint, matched by preceding timestamp; not independent ground truth. RTL targets differ from the takeoff hold target."
+    },
+    "messages": [
+      {
+        "t_s": -0.0067,
+        "text": "[commander] Armed by external command"
+      },
+      {
+        "t_s": -0.0031,
+        "text": "[logger] Start file log (type: full)"
+      },
+      {
+        "t_s": -0.0019,
+        "text": "[logger] [logger] /fs/microsd/log/2026-10-24/02_02_57.ulg"
+      },
+      {
+        "t_s": -0.0,
+        "text": "[logger] Opened full log file: /fs/microsd/log/2026-10-24/02_02_57.ulg"
+      },
+      {
+        "t_s": 1.8681,
+        "text": "[commander] Takeoff detected"
+      },
+      {
+        "t_s": 3.8812,
+        "text": "[failsafe] Failsafe activated"
+      },
+      {
+        "t_s": 3.9393,
+        "text": "[navigator] RTL: start return at 20 m (2 m above destination)"
+      },
+      {
+        "t_s": 3.9886,
+        "text": "[navigator] RTL: land at destination"
+      },
+      {
+        "t_s": 6.4115,
+        "text": "[health_and_arming_checks] Preflight Fail: Compass 0 fault"
+      },
+      {
+        "t_s": 8.5023,
+        "text": "[health_and_arming_checks] Compass needs calibration - Land now!"
+      },
+      {
+        "t_s": 8.5026,
+        "text": "[health_and_arming_checks] Preflight Fail: Compass 0 fault"
+      },
+      {
+        "t_s": 9.5252,
+        "text": "[commander] Connection to mission computer lost"
+      },
+      {
+        "t_s": 13.6832,
+        "text": "[commander] Landing detected"
+      },
+      {
+        "t_s": 15.6851,
+        "text": "[commander] Disarmed by landing"
+      },
+      {
+        "t_s": 16.1375,
+        "text": "[mavlink] exiting channel 1"
+      }
+    ],
+    "motor_commands_before_offboard_loss": [
+      {
+        "motor_number": 1,
+        "normalized_command_range": [
+          0.1142,
+          0.4203
+        ],
+        "first_command_ge_0_99_s": null
+      },
+      {
+        "motor_number": 2,
+        "normalized_command_range": [
+          0.2819,
+          0.397
+        ],
+        "first_command_ge_0_99_s": null
+      },
+      {
+        "motor_number": 3,
+        "normalized_command_range": [
+          0.1688,
+          0.4272
+        ],
+        "first_command_ge_0_99_s": null
+      },
+      {
+        "motor_number": 4,
+        "normalized_command_range": [
+          0.2295,
+          0.5529
+        ],
+        "first_command_ge_0_99_s": null
+      }
+    ]
+  },
+  {
+    "file": "log_102_2026-10-24-09-12-10.ulg",
+    "firmware_branch": "release/1.17",
+    "duration_s": 25.0753,
+    "parameters": {
+      "SYS_HITL": 0,
+      "COM_OF_LOSS_T": 1.0,
+      "COM_OBL_RC_ACT": 0,
+      "COM_RCL_EXCEPT": 0,
+      "NAV_RCL_ACT": 2,
+      "MPC_THR_HOVER": 0.5,
+      "EKF2_HGT_REF": 1,
+      "BAT1_N_CELLS": 6,
+      "CBRK_IO_SAFETY": 22027,
+      "COM_PREARM_MODE": 0,
+      "COM_MOT_TEST_EN": 1,
+      "SYS_AUTOSTART": 4001,
+      "PWM_AUX_FUNC1": 101,
+      "PWM_AUX_FUNC2": 102,
+      "PWM_AUX_FUNC3": 103,
+      "PWM_AUX_FUNC4": 104,
+      "PWM_AUX_DIS1": 1000,
+      "PWM_AUX_DIS2": 1000,
+      "PWM_AUX_DIS3": 1000,
+      "PWM_AUX_DIS4": 1000,
+      "PWM_AUX_MIN1": 1100,
+      "PWM_AUX_MIN2": 1100,
+      "PWM_AUX_MIN3": 1100,
+      "PWM_AUX_MIN4": 1100
+    },
+    "gps": {
+      "fix_type": [
+        3.0,
+        3.0
+      ],
+      "satellites_used": [
+        24.0,
+        29.0
+      ],
+      "eph": [
+        0.389,
+        0.451
+      ],
+      "epv": [
+        0.809,
+        1.123
+      ],
+      "jamming_state": [
+        1.0,
+        1.0
+      ]
+    },
+    "initial_local_xyz_m": [
+      -0.9991,
+      2.8093,
+      5.2308
+    ],
+    "old_target_minus2_climb_from_initial_m": 7.2308,
+    "local_valid": {
+      "xy_valid": [
+        1.0,
+        1.0
+      ],
+      "z_valid": [
+        1.0,
+        1.0
+      ]
+    },
+    "local_reset_counters": {
+      "xy_reset_counter": [
+        6.0,
+        7.0
+      ],
+      "z_reset_counter": [
+        3.0,
+        4.0
+      ]
+    },
+    "last_offboard_message_s": 6.3372,
+    "first_offboard_lost_s": 7.4026,
+    "nav_state_changes": [
+      {
+        "t_s": 0.0336,
+        "value": 14
+      },
+      {
+        "t_s": 7.4137,
+        "value": 5
+      },
+      {
+        "t_s": 24.0796,
+        "value": 14
+      }
+    ],
+    "failsafe_changes": [
+      {
+        "t_s": 0.0336,
+        "value": 0
+      },
+      {
+        "t_s": 7.4137,
+        "value": 1
+      },
+      {
+        "t_s": 24.0796,
+        "value": 0
+      }
+    ],
+    "estimator_checks": [
+      {
+        "instance": 0,
+        "gps_check_fail_flags": [
+          0.0,
+          0.0
+        ],
+        "filter_fault_flags": [
+          0.0,
+          0.0
+        ]
+      },
+      {
+        "instance": 1,
+        "gps_check_fail_flags": [
+          0.0,
+          0.0
+        ],
+        "filter_fault_flags": [
+          0.0,
+          0.0
+        ]
+      }
+    ],
+    "imu_clipping_max_per_axis": [
+      {
+        "instance": 0,
+        "max": [
+          31,
+          2,
+          0
+        ]
+      },
+      {
+        "instance": 1,
+        "max": [
+          367,
+          285,
+          64
+        ]
+      }
+    ],
+    "horizontal_tracking": {
+      "offboard_until_last_received_setpoint": {
+        "sample_count": 64,
+        "max_estimated_xy_tracking_error_m": 2.8155,
+        "at_s": 6.2638,
+        "estimated_xy_m": [
+          1.6024,
+          3.9284
+        ],
+        "target_xy_m": [
+          -0.9594,
+          2.7605
+        ],
+        "axis_tracking": {
+          "x": {
+            "max_abs_error_m": 2.5618,
+            "signed_error_at_max_m": 2.5618,
+            "at_s": 6.2638,
+            "target_min_max_m": [
+              -0.9594,
+              -0.9594
+            ],
+            "first_abs_error_over_0_5m_s": 5.8589
+          },
+          "y": {
+            "max_abs_error_m": 1.1679,
+            "signed_error_at_max_m": 1.1679,
+            "at_s": 6.2638,
+            "target_min_max_m": [
+              2.7605,
+              2.7605
+            ],
+            "first_abs_error_over_0_5m_s": 6.0564
+          }
+        }
+      },
+      "all_offboard_samples": {
+        "sample_count": 85,
+        "max_estimated_xy_tracking_error_m": 3.2497,
+        "at_s": 6.6624,
+        "estimated_xy_m": [
+          1.7961,
+          4.483
+        ],
+        "target_xy_m": [
+          -0.9594,
+          2.7605
+        ],
+        "axis_tracking": {
+          "x": {
+            "max_abs_error_m": 2.8001,
+            "signed_error_at_max_m": 2.8001,
+            "at_s": 6.5648,
+            "target_min_max_m": [
+              -0.9594,
+              -0.7712
+            ],
+            "first_abs_error_over_0_5m_s": 5.8589
+          },
+          "y": {
+            "max_abs_error_m": 1.7464,
+            "signed_error_at_max_m": 1.7464,
+            "at_s": 6.7647,
+            "target_min_max_m": [
+              2.7605,
+              3.1067
+            ],
+            "first_abs_error_over_0_5m_s": 6.0564
+          }
+        }
+      },
+      "rtl_samples": {
+        "sample_count": 167,
+        "max_estimated_xy_tracking_error_m": 0.9401,
+        "at_s": 13.3585,
+        "estimated_xy_m": [
+          -1.7269,
+          2.256
+        ],
+        "target_xy_m": [
+          -1.0108,
+          2.865
+        ],
+        "axis_tracking": {
+          "x": {
+            "max_abs_error_m": 0.7161,
+            "signed_error_at_max_m": -0.7161,
+            "at_s": 13.3585,
+            "target_min_max_m": [
+              -1.0139,
+              0.6384
+            ],
+            "first_abs_error_over_0_5m_s": 9.4629
+          },
+          "y": {
+            "max_abs_error_m": 0.6303,
+            "signed_error_at_max_m": -0.6303,
+            "at_s": 14.0549,
+            "target_min_max_m": [
+              2.8603,
+              3.8566
+            ],
+            "first_abs_error_over_0_5m_s": 8.8628
+          }
+        }
+      },
+      "resets": [
+        {
+          "counter": "heading_reset_counter",
+          "at_s": 4.0637,
+          "delta": {
+            "delta_heading": 0.091
+          }
+        },
+        {
+          "counter": "xy_reset_counter",
+          "at_s": 6.0564,
+          "delta": {
+            "delta_xy[0]": 1.2141,
+            "delta_xy[1]": 0.6401
+          }
+        },
+        {
+          "counter": "heading_reset_counter",
+          "at_s": 6.0564,
+          "delta": {
+            "delta_heading": -2.0632
+          }
+        },
+        {
+          "counter": "z_reset_counter",
+          "at_s": 6.0564,
+          "delta": {
+            "delta_z": -0.275
+          }
+        }
+      ],
+      "note": "Estimator position versus most recent logged trajectory setpoint, matched by preceding timestamp; not independent ground truth. RTL targets differ from the takeoff hold target."
+    },
+    "messages": [
+      {
+        "t_s": -0.0063,
+        "text": "[commander] Armed by external command"
+      },
+      {
+        "t_s": -0.0035,
+        "text": "[logger] Start file log (type: full)"
+      },
+      {
+        "t_s": -0.0019,
+        "text": "[logger] [logger] /fs/microsd/log/2026-10-24/02_11_46.ulg"
+      },
+      {
+        "t_s": -0.0,
+        "text": "[logger] Opened full log file: /fs/microsd/log/2026-10-24/02_11_46.ulg"
+      },
+      {
+        "t_s": 1.8245,
+        "text": "[commander] Takeoff detected"
+      },
+      {
+        "t_s": 5.862,
+        "text": "[health_and_arming_checks] Preflight Fail: Compass 0 fault"
+      },
+      {
+        "t_s": 7.4136,
+        "text": "[failsafe] Failsafe activated"
+      },
+      {
+        "t_s": 7.4735,
+        "text": "[navigator] RTL: start return at 19 m (7 m above destination)"
+      },
+      {
+        "t_s": 11.0548,
+        "text": "[navigator] RTL: land at destination"
+      },
+      {
+        "t_s": 13.0576,
+        "text": "[commander] Connection to mission computer lost"
+      },
+      {
+        "t_s": 22.0778,
+        "text": "[commander] Landing detected"
+      },
+      {
+        "t_s": 24.0795,
+        "text": "[commander] Disarmed by landing"
+      },
+      {
+        "t_s": 24.4275,
+        "text": "[mavlink] exiting channel 1"
+      }
+    ],
+    "motor_commands_before_offboard_loss": [
+      {
+        "motor_number": 1,
+        "normalized_command_range": [
+          0.0,
+          1.0
+        ],
+        "first_command_ge_0_99_s": 6.0649
+      },
+      {
+        "motor_number": 2,
+        "normalized_command_range": [
+          0.0,
+          1.0
+        ],
+        "first_command_ge_0_99_s": 6.2649
+      },
+      {
+        "motor_number": 3,
+        "normalized_command_range": [
+          0.0,
+          0.8007
+        ],
+        "first_command_ge_0_99_s": null
+      },
+      {
+        "motor_number": 4,
+        "normalized_command_range": [
+          0.0,
+          0.6233
+        ],
+        "first_command_ge_0_99_s": null
+      }
+    ]
+  },
+  {
+    "file": "log_98_2026-10-24-08-24-50.ulg",
+    "firmware_branch": "release/1.17",
+    "duration_s": 29.1226,
+    "parameters": {
+      "SYS_HITL": 0,
+      "COM_OF_LOSS_T": 1.0,
+      "COM_OBL_RC_ACT": 0,
+      "COM_RCL_EXCEPT": 0,
+      "NAV_RCL_ACT": 2,
+      "MPC_THR_HOVER": 0.5,
+      "EKF2_HGT_REF": 1,
+      "BAT1_N_CELLS": 6,
+      "CBRK_IO_SAFETY": 22027,
+      "COM_PREARM_MODE": 0,
+      "COM_MOT_TEST_EN": 1,
+      "SYS_AUTOSTART": 4001,
+      "PWM_AUX_FUNC1": 101,
+      "PWM_AUX_FUNC2": 102,
+      "PWM_AUX_FUNC3": 103,
+      "PWM_AUX_FUNC4": 104,
+      "PWM_AUX_DIS1": 1000,
+      "PWM_AUX_DIS2": 1000,
+      "PWM_AUX_DIS3": 1000,
+      "PWM_AUX_DIS4": 1000,
+      "PWM_AUX_MIN1": 1100,
+      "PWM_AUX_MIN2": 1100,
+      "PWM_AUX_MIN3": 1100,
+      "PWM_AUX_MIN4": 1100
+    },
+    "gps": {
+      "fix_type": [
+        3.0,
+        4.0
+      ],
+      "satellites_used": [
+        17.0,
+        23.0
+      ],
+      "eph": [
+        0.321,
+        0.475
+      ],
+      "epv": [
+        0.702,
+        0.9
+      ],
+      "jamming_state": [
+        1.0,
+        1.0
+      ]
+    },
+    "initial_local_xyz_m": [
+      0.6324,
+      1.8276,
+      3.9734
+    ],
+    "old_target_minus2_climb_from_initial_m": 5.9734,
+    "local_valid": {
+      "xy_valid": [
+        1.0,
+        1.0
+      ],
+      "z_valid": [
+        1.0,
+        1.0
+      ]
+    },
+    "local_reset_counters": {
+      "xy_reset_counter": [
+        4.0,
+        6.0
+      ],
+      "z_reset_counter": [
+        3.0,
+        4.0
+      ]
+    },
+    "last_offboard_message_s": 6.8947,
+    "first_offboard_lost_s": 7.9477,
+    "nav_state_changes": [
+      {
+        "t_s": 0.0334,
+        "value": 14
+      },
+      {
+        "t_s": 7.9588,
+        "value": 5
+      },
+      {
+        "t_s": 28.1246,
+        "value": 14
+      }
+    ],
+    "failsafe_changes": [
+      {
+        "t_s": 0.0334,
+        "value": 0
+      },
+      {
+        "t_s": 7.9588,
+        "value": 1
+      },
+      {
+        "t_s": 28.1246,
+        "value": 0
+      }
+    ],
+    "estimator_checks": [
+      {
+        "instance": 0,
+        "gps_check_fail_flags": [
+          0.0,
+          0.0
+        ],
+        "filter_fault_flags": [
+          0.0,
+          0.0
+        ]
+      },
+      {
+        "instance": 1,
+        "gps_check_fail_flags": [
+          0.0,
+          0.0
+        ],
+        "filter_fault_flags": [
+          0.0,
+          3072.0
+        ]
+      }
+    ],
+    "imu_clipping_max_per_axis": [
+      {
+        "instance": 0,
+        "max": [
+          167,
+          24,
+          39
+        ]
+      },
+      {
+        "instance": 1,
+        "max": [
+          2926,
+          1731,
+          623
+        ]
+      }
+    ],
+    "horizontal_tracking": {
+      "offboard_until_last_received_setpoint": {
+        "sample_count": 70,
+        "max_estimated_xy_tracking_error_m": 3.508,
+        "at_s": 6.8528,
+        "estimated_xy_m": [
+          -0.6388,
+          5.1304
+        ],
+        "target_xy_m": [
+          0.6031,
+          1.8496
+        ],
+        "axis_tracking": {
+          "x": {
+            "max_abs_error_m": 1.2419,
+            "signed_error_at_max_m": -1.2419,
+            "at_s": 6.8528,
+            "target_min_max_m": [
+              0.6031,
+              0.6314
+            ],
+            "first_abs_error_over_0_5m_s": 4.651
+          },
+          "y": {
+            "max_abs_error_m": 3.2808,
+            "signed_error_at_max_m": 3.2808,
+            "at_s": 6.8528,
+            "target_min_max_m": [
+              1.8287,
+              1.8496
+            ],
+            "first_abs_error_over_0_5m_s": 4.651
+          }
+        }
+      },
+      "all_offboard_samples": {
+        "sample_count": 91,
+        "max_estimated_xy_tracking_error_m": 3.6976,
+        "at_s": 7.2496,
+        "estimated_xy_m": [
+          -1.0242,
+          5.1699
+        ],
+        "target_xy_m": [
+          0.6031,
+          1.8496
+        ],
+        "axis_tracking": {
+          "x": {
+            "max_abs_error_m": 1.6805,
+            "signed_error_at_max_m": -1.6805,
+            "at_s": 7.3588,
+            "target_min_max_m": [
+              0.2645,
+              0.6314
+            ],
+            "first_abs_error_over_0_5m_s": 4.651
+          },
+          "y": {
+            "max_abs_error_m": 3.3263,
+            "signed_error_at_max_m": 3.3263,
+            "at_s": 7.1605,
+            "target_min_max_m": [
+              1.2588,
+              1.8496
+            ],
+            "first_abs_error_over_0_5m_s": 4.651
+          }
+        }
+      },
+      "rtl_samples": {
+        "sample_count": 201,
+        "max_estimated_xy_tracking_error_m": 2.4918,
+        "at_s": 8.3553,
+        "estimated_xy_m": [
+          1.5715,
+          3.999
+        ],
+        "target_xy_m": [
+          1.8283,
+          6.4775
+        ],
+        "axis_tracking": {
+          "x": {
+            "max_abs_error_m": 0.6014,
+            "signed_error_at_max_m": -0.6014,
+            "at_s": 21.2538,
+            "target_min_max_m": [
+              0.2302,
+              2.2593
+            ],
+            "first_abs_error_over_0_5m_s": 15.2572
+          },
+          "y": {
+            "max_abs_error_m": 2.4785,
+            "signed_error_at_max_m": -2.4785,
+            "at_s": 8.3553,
+            "target_min_max_m": [
+              1.2605,
+              6.4775
+            ],
+            "first_abs_error_over_0_5m_s": 8.3553
+          }
+        }
+      },
+      "resets": [
+        {
+          "counter": "heading_reset_counter",
+          "at_s": 4.0559,
+          "delta": {
+            "delta_heading": 0.14
+          }
+        },
+        {
+          "counter": "xy_reset_counter",
+          "at_s": 8.0514,
+          "delta": {
+            "delta_xy[0]": 0.8557,
+            "delta_xy[1]": 2.3361
+          }
+        },
+        {
+          "counter": "heading_reset_counter",
+          "at_s": 8.0514,
+          "delta": {
+            "delta_heading": 0.1965
+          }
+        },
+        {
+          "counter": "z_reset_counter",
+          "at_s": 8.0514,
+          "delta": {
+            "delta_z": -1.0823
+          }
+        },
+        {
+          "counter": "xy_reset_counter",
+          "at_s": 8.3553,
+          "delta": {
+            "delta_xy[0]": -0.4338,
+            "delta_xy[1]": -1.4443
+          }
+        },
+        {
+          "counter": "heading_reset_counter",
+          "at_s": 8.3553,
+          "delta": {
+            "delta_heading": -0.7341
+          }
+        }
+      ],
+      "note": "Estimator position versus most recent logged trajectory setpoint, matched by preceding timestamp; not independent ground truth. RTL targets differ from the takeoff hold target."
+    },
+    "messages": [
+      {
+        "t_s": -0.0044,
+        "text": "[commander] Armed by external command"
+      },
+      {
+        "t_s": -0.0034,
+        "text": "[logger] Start file log (type: full)"
+      },
+      {
+        "t_s": -0.0022,
+        "text": "[logger] [logger] /fs/microsd/log/2026-10-24/01_24_21.ulg"
+      },
+      {
+        "t_s": -0.0,
+        "text": "[logger] Opened full log file: /fs/microsd/log/2026-10-24/01_24_21.ulg"
+      },
+      {
+        "t_s": 1.8426,
+        "text": "[commander] Takeoff detected"
+      },
+      {
+        "t_s": 7.1056,
+        "text": "[vehicle_imu] Accel 1 clipping, not safe to fly!"
+      },
+      {
+        "t_s": 7.9477,
+        "text": "[health_and_arming_checks] Low battery"
+      },
+      {
+        "t_s": 7.9586,
+        "text": "[failsafe] Failsafe activated"
+      },
+      {
+        "t_s": 7.9739,
+        "text": "[ekf2] primary EKF changed 1 (filter fault) -> 0"
+      },
+      {
+        "t_s": 8.016,
+        "text": "[navigator] RTL: start return at 25 m (4 m above destination)"
+      },
+      {
+        "t_s": 9.7752,
+        "text": "[navigator] RTL: land at destination"
+      },
+      {
+        "t_s": 13.1655,
+        "text": "[vehicle_imu] Accel 1 clipping, not safe to fly!"
+      },
+      {
+        "t_s": 14.1293,
+        "text": "[commander] Connection to mission computer lost"
+      },
+      {
+        "t_s": 26.1227,
+        "text": "[commander] Landing detected"
+      },
+      {
+        "t_s": 28.1243,
+        "text": "[commander] Disarmed by landing"
+      },
+      {
+        "t_s": 28.3198,
+        "text": "[mavlink] exiting channel 1"
+      }
+    ],
+    "motor_commands_before_offboard_loss": [
+      {
+        "motor_number": 1,
+        "normalized_command_range": [
+          0.1977,
+          1.0
+        ],
+        "first_command_ge_0_99_s": 6.8599
+      },
+      {
+        "motor_number": 2,
+        "normalized_command_range": [
+          0.219,
+          1.0
+        ],
+        "first_command_ge_0_99_s": 6.8599
+      },
+      {
+        "motor_number": 3,
+        "normalized_command_range": [
+          0.0,
+          0.4937
+        ],
+        "first_command_ge_0_99_s": null
+      },
+      {
+        "motor_number": 4,
+        "normalized_command_range": [
+          0.1957,
+          0.6352
+        ],
+        "first_command_ge_0_99_s": null
+      }
+    ]
+  }
+]

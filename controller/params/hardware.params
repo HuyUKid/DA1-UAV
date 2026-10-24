@@ -1,0 +1,13 @@
+# PX4 companion interface overlay for real hardware (SYS_HITL=0).
+# Assumes MAVLink instance 1 on TELEM2, 921600 baud, TX/RX/GND only.
+# FLOW_CTRL=0 forces RTS/CTS off; verify actual wiring before import.
+# No airframe/output mapping, calibration, motion tuning, or failsafe changes.
+# Configure and validate those separately on this exact UAV. Reboot after import.
+# Vehicle-Id Component-Id Name Value Type
+1	1	SYS_HITL	0	6
+1	1	MAV_1_CONFIG	102	6
+1	1	MAV_1_MODE	2	6
+1	1	MAV_1_FLOW_CTRL	0	6
+1	1	MAV_1_FORWARD	0	6
+1	1	MAV_1_RATE	0	6
+1	1	SER_TEL2_BAUD	921600	6

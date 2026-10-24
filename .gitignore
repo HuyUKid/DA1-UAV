@@ -1,0 +1,32 @@
+# Local Python environments and build products
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.native/
+build/
+dist/
+*.egg-info/
+
+# Runtime recordings and simulation results
+session-logs/
+artifacts/
+*.log
+*.ulg
+!logs/2026-10-24/*.ulg
+*.tar.gz
+pi-before.json
+pi-after.json
+pi-diagnostic.json
+connection_report.json
+
+# Local credentials and editor/OS files
+.env
+.env.*
+!.env.example
+.pi_api_token
+*.pem
+*.key
+.DS_Store
+.vscode/
+.idea/

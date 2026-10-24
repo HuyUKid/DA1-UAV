@@ -1,0 +1,3 @@
+# Offline analysis of PX4 ULog files; not needed by the flight console.
+numpy>=1.24,<3
+pyulog>=1.1,<2

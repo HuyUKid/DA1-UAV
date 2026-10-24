@@ -1,0 +1,452 @@
+<?xml version='1.0' encoding='utf-8'?>
+<mxfile host="app.diagrams.net" compressed="false" scale="1" border="0">
+  <diagram id="uav-controller-simple" name="Sơ đồ thuật toán UAV Controller">
+    <mxGraphModel dx="5379" dy="3147" grid="1" gridSize="9" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2640" pageHeight="3700" background="#ffffff" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="shape=text;whiteSpace=wrap;html=0;rounded=0;fillColor=#ffffff;strokeColor=#ffffff;strokeWidth=2;fontFamily=Verdana;fontSize=32;fontColor=#203044;align=center;verticalAlign=middle;spacing=8;strokeColor=none;fillColor=none;spacing=2;" value="SƠ ĐỒ UAV — PI QUẢN LÝ TRẠNG THÁI, PX4 ĐIỀU KHIỂN" vertex="1">
+          <mxGeometry height="60" width="1380" x="350" y="25" as="geometry" />
+        </mxCell>
+        <mxCell id="responsibility_note" parent="1" style="text;html=0;whiteSpace=wrap;align=center;fontSize=18;fontColor=#203044;" value="Pi: FSM, truyền mục tiêu và giám sát vị trí/yaw + dwell. PX4: EKF, toàn bộ vòng điều khiển và motor." vertex="1">
+          <mxGeometry x="350" y="82" width="1800" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="S" parent="1" style="shape=ellipse;whiteSpace=wrap;html=0;rounded=0;fillColor=#eaf3e6;strokeColor=#537746;strokeWidth=2;fontFamily=Verdana;fontSize=22;fontColor=#203044;align=center;verticalAlign=middle;spacing=8;" value="Bắt đầu" vertex="1">
+          <mxGeometry height="70" width="260" x="910" y="115" as="geometry" />
+        </mxCell>
+        <mxCell id="A" parent="1" style="shape=rectangle;whiteSpace=wrap;html=0;rounded=0;fillColor=#edf3fc;strokeColor=#4b6585;strokeWidth=2;fontFamily=Verdana;fontSize=22;fontColor=#203044;align=center;verticalAlign=middle;spacing=8;" value="Pi: đọc cấu hình, kiểm tra profile&#10;PX4: cung cấp telemetry và SYS_HITL" vertex="1">
+          <mxGeometry height="80" width="500" x="790" y="235" as="geometry" />
+        </mxCell>
+        <mxCell id="B" parent="1" style="shape=rectangle;whiteSpace=wrap;html=0;rounded=0;fillColor=#edf3fc;strokeColor=#4b6585;strokeWidth=2;fontFamily=Verdana;fontSize=22;fontColor=#203044;align=center;verticalAlign=middle;spacing=8;" value="Pi: kết nối MAVLink tới Pixhawk&#10;và nhận lệnh từ console" vertex="1">
+          <mxGeometry height="80" width="500" x="790" y="370" as="geometry" />
+        </mxCell>
+        <mxCell id="C" parent="1" style="shape=rectangle;whiteSpace=wrap;html=0;rounded=0;fillColor=#edf3fc;strokeColor=#4b6585;strokeWidth=2;fontFamily=Verdana;fontSize=22;fontColor=#203044;align=center;verticalAlign=middle;spacing=8;" value="Pi: chờ lệnh console theo trạng thái&#10;HOLD giữ tới lệnh tiếp theo" vertex="1">
+          <mxGeometry height="80" width="500" x="790" y="505" as="geometry" />
+        </mxCell>
+        <mxCell id="R" parent="1" style="shape=parallelogram;whiteSpace=wrap;html=0;rounded=0;fillColor=#e8f4f1;strokeColor=#428070;strokeWidth=2;fontFamily=Verdana;fontSize=22;fontColor=#203044;align=center;verticalAlign=middle;spacing=8;size=0.06;" value="Pi: ARM / TAKEOFF / FLY&#10;LAND / DISARM; HOLD tự động" vertex="1">
+          <mxGeometry height="90" width="520" x="780" y="640" as="geometry" />
+        </mxCell>
+        <mxCell id="TYPE" parent="1" style="shape=rhombus;whiteSpace=wrap;html=0;rounded=0;fillColor=#fff5d9;strokeColor=#a88235;strokeWidth=2;fontFamily=Verdana;fontSize=22;fontColor=#203044;align=center;verticalAlign=middle;spacing=8;" value="Pi: kiểm tra FSM&#10;PX4: thực hiện yêu cầu" vertex="1">
+          <mxGeometry height="160" width="520" x="780" y="790" as="geometry" />
+        </mxCell>
+        <mxCell id="E" parent="1" style="shape=parallelogram;whiteSpace=wrap;html=0;rounded=0;fillColor=#e8f4f1;strokeColor=#428070;strokeWidth=2;fontFamily=Verdana;fontSize=21;fontColor=#203044;align=center;verticalAlign=middle;spacing=8;size=0.06;" value="Pi hoặc PX4: từ chối và nêu lý do&#10;không xếp hàng lệnh khi đang bận" vertex="1">
+          <mxGeometry height="110" width="450" x="40" y="650" as="geometry" />
+        </mxCell>
+        <mxCell id="D" parent="1" style="shape=rhombus;whiteSpace=wrap;html=0;rounded=0;fillColor=#fff5d9;strokeColor=#a88235;strokeWidth=2;fontFamily=Verdana;fontSize=22;fontColor=#203044;align=center;verticalAlign=middle;spacing=8;" value="Pi: IDLE hoặc ARMED, ON_GROUND?&#10;PX4: preflight và quyền ARM?" vertex="1">
+          <mxGeometry height="180" width="520" x="70" y="1100" as="geometry" />
+        </mxCell>
+        <mxCell id="FLY_CHECK" parent="1" style="shape=rhombus;whiteSpace=wrap;html=0;rounded=0;fillColor=#fff5d9;strokeColor=#a88235;strokeWidth=2;fontFamily=Verdana;fontSize=22;fontColor=#203044;align=center;verticalAlign=middle;spacing=8;" value="Pi: TAKEOFF hoàn tất và&#10;mode HOLD mới đã xác nhận?" vertex="1">
+          <mxGeometry height="180" width="520" x="780" y="1100" as="geometry" />
+        </mxCell>
+        <mxCell id="LAND_CHECK" parent="1" style="shape=rhombus;whiteSpace=wrap;html=0;rounded=0;fillColor=#fff5d9;strokeColor=#a88235;strokeWidth=2;fontFamily=Verdana;fontSize=22;fontColor=#203044;align=center;verticalAlign=middle;spacing=8;" value="Kết nối, quyền actuation,&#10;không bị chốt TERMINATION?" vertex="1">
+          <mxGeometry height="180" width="520" x="1480" y="1100" as="geometry" />
+        </mxCell>
+        <mxCell id="ALREADY_GROUND" parent="1" style="shape=parallelogram;whiteSpace=wrap;html=0;rounded=0;fillColor=#e8f4f1;strokeColor=#428070;strokeWidth=2;fontFamily=Verdana;fontSize=21;fontColor=#203044;align=center;verticalAlign=middle;spacing=8;size=0.06;" value="Thử bàn khi đã tháo cánh:&#10;ARM→LAND khác LAND khi bay" vertex="1">
+          <mxGeometry height="100" width="350" x="2150" y="1140" as="geometry" />
+        </mxCell>
+        <mxCell id="TAKEOFF" parent="1" style="shape=rectangle;whiteSpace=wrap;html=0;rounded=0;fillColor=#edf3fc;strokeColor=#4b6585;strokeWidth=2;fontFamily=Verdana;fontSize=22;fontColor=#203044;align=center;verticalAlign=middle;spacing=8;" value="Pi: chụp local NED, gửi đích&#10;PX4: ARM/OFFBOARD và điều khiển lên" vertex="1">
+          <mxGeometry height="110" width="500" x="80" y="1530" as="geometry" />
+        </mxCell>
+        <mxCell id="FLY" parent="1" style="shape=rectangle;whiteSpace=wrap;html=0;rounded=0;fillColor=#edf3fc;strokeColor=#4b6585;strokeWidth=2;fontFamily=Verdana;fontSize=22;fontColor=#203044;align=center;verticalAlign=middle;spacing=8;" value="Pi: chỉ đổi đích khi FLY tường minh&#10;PX4: OFFBOARD, bay tới đích" vertex="1">
+          <mxGeometry height="110" width="500" x="790" y="1530" as="geometry" />
+        </mxCell>
+        <mxCell id="LAND" parent="1" style="shape=rectangle;whiteSpace=wrap;html=0;rounded=0;fillColor=#edf3fc;strokeColor=#4b6585;strokeWidth=2;fontFamily=Verdana;fontSize=22;fontColor=#203044;align=center;verticalAlign=middle;spacing=8;" value="Pi: LAND, giữ kết nối&#10;PX4: hạ cánh; báo chạm đất/disarm" vertex="1">
+          <mxGeometry height="120" width="500" x="1490" y="1530" as="geometry" />
+        </mxCell>
+        <mxCell id="G" parent="1" style="shape=parallelogram;whiteSpace=wrap;html=0;rounded=0;fillColor=#e8f4f1;strokeColor=#428070;strokeWidth=2;fontFamily=Verdana;fontSize=22;fontColor=#203044;align=center;verticalAlign=middle;spacing=8;size=0.06;" value="PX4: cảm biến / EKF / điều khiển&#10;Pi: kiểm tra telemetry mới, phase" vertex="1">
+          <mxGeometry height="100" width="520" x="780" y="1740" as="geometry" />
+        </mxCell>
+        <mxCell id="H" parent="1" style="shape=rhombus;whiteSpace=wrap;html=0;rounded=0;fillColor=#fff5d9;strokeColor=#a88235;strokeWidth=2;fontFamily=Verdana;fontSize=22;fontColor=#203044;align=center;verticalAlign=middle;spacing=8;" value="PX4 / phi công tiếp quản&#10;hoặc mất liên kết?" vertex="1">
+          <mxGeometry height="170" width="550" x="765" y="1900" as="geometry" />
+        </mxCell>
+        <mxCell id="I" parent="1" style="shape=rectangle;whiteSpace=wrap;html=0;rounded=0;fillColor=#edf3fc;strokeColor=#4b6585;strokeWidth=2;fontFamily=Verdana;fontSize=22;fontColor=#203044;align=center;verticalAlign=middle;spacing=8;" value="Pi: chốt EXTERNAL, dừng stream&#10;không tự giành lại mode" vertex="1">
+          <mxGeometry height="100" width="500" x="1490" y="1935" as="geometry" />
+        </mxCell>
+        <mxCell id="J" parent="1" style="shape=rhombus;whiteSpace=wrap;html=0;rounded=0;fillColor=#fff5d9;strokeColor=#a88235;strokeWidth=2;fontFamily=Verdana;fontSize=22;fontColor=#203044;align=center;verticalAlign=middle;spacing=8;" value="PX4 phát hiện&#10;điều kiện EMERGENCY?" vertex="1">
+          <mxGeometry height="160" width="520" x="780" y="2140" as="geometry" />
+        </mxCell>
+        <mxCell id="K" parent="1" style="shape=rectangle;whiteSpace=wrap;html=0;rounded=0;fillColor=#edf3fc;strokeColor=#4b6585;strokeWidth=2;fontFamily=Verdana;fontSize=22;fontColor=#203044;align=center;verticalAlign=middle;spacing=8;" value="PX4: xử lý failsafe theo cấu hình&#10;Pi: ghi trạng thái/cảnh báo vào log" vertex="1">
+          <mxGeometry height="140" width="500" x="1490" y="2150" as="geometry" />
+        </mxCell>
+        <mxCell id="L" parent="1" style="shape=rectangle;whiteSpace=wrap;html=0;rounded=0;fillColor=#edf3fc;strokeColor=#4b6585;strokeWidth=2;fontFamily=Verdana;fontSize=22;fontColor=#203044;align=center;verticalAlign=middle;spacing=8;" value="PX4: sai lệch → vận tốc/gia tốc&#10;Pi chỉ giám sát ngưỡng đích, không PID" vertex="1">
+          <mxGeometry height="130" width="520" x="780" y="2421" as="geometry" />
+        </mxCell>
+        <mxCell id="N" parent="1" style="shape=parallelogram;whiteSpace=wrap;html=0;rounded=0;fillColor=#e8f4f1;strokeColor=#428070;strokeWidth=2;fontFamily=Verdana;fontSize=22;fontColor=#203044;align=center;verticalAlign=middle;spacing=8;size=0.06;" value="PX4: position → velocity → attitude&#10;→ rate → motor" vertex="1">
+          <mxGeometry height="120" width="530" x="775" y="2646" as="geometry" />
+        </mxCell>
+        <mxCell id="O" parent="1" style="shape=rhombus;whiteSpace=wrap;html=0;rounded=0;fillColor=#fff5d9;strokeColor=#a88235;strokeWidth=2;fontFamily=Verdana;fontSize=22;fontColor=#203044;align=center;verticalAlign=middle;spacing=8;" value="Pi: vị trí và yaw trong ngưỡng&#10;đủ dwell ở các mẫu mới?" vertex="1">
+          <mxGeometry height="160" width="520" x="780" y="2990" as="geometry" />
+        </mxCell>
+        <mxCell id="P" parent="1" style="shape=rectangle;whiteSpace=wrap;html=0;rounded=0;fillColor=#edf3fc;strokeColor=#4b6585;strokeWidth=2;fontFamily=Verdana;fontSize=22;fontColor=#203044;align=center;verticalAlign=middle;spacing=8;" value="Pi yêu cầu native PX4 HOLD&#10;PX4 phanh và giữ vị trí hiện tại" vertex="1">
+          <mxGeometry height="110" width="500" x="1490" y="3015" as="geometry" />
+        </mxCell>
+        <mxCell id="HOLD_CHECK" parent="1" style="shape=rhombus;whiteSpace=wrap;html=0;rounded=0;fillColor=#fff5d9;strokeColor=#a88235;strokeWidth=2;fontFamily=Verdana;fontSize=22;fontColor=#203044;align=center;verticalAlign=middle;spacing=8;" value="Pi: chờ telemetry HOLD mới&#10;ACK chưa đủ; timeout 5 s" vertex="1">
+          <mxGeometry height="160" width="520" x="1480" y="3210" as="geometry" />
+        </mxCell>
+        <mxCell id="top_0" edge="1" parent="1" source="S" style="edgeStyle=none;rounded=0;html=0;strokeWidth=2;strokeColor=#526173;endArrow=block;endFill=1;jumpStyle=arc;jumpSize=12;exitX=0.5;exitY=1;exitPerimeter=0;entryX=0.5;entryY=0;entryPerimeter=0;fontFamily=Verdana;" target="A">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="top_1" edge="1" parent="1" source="A" style="edgeStyle=none;rounded=0;html=0;strokeWidth=2;strokeColor=#526173;endArrow=block;endFill=1;jumpStyle=arc;jumpSize=12;exitX=0.5;exitY=1;exitPerimeter=0;entryX=0.5;entryY=0;entryPerimeter=0;fontFamily=Verdana;" target="B">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="top_2" edge="1" parent="1" source="B" style="edgeStyle=none;rounded=0;html=0;strokeWidth=2;strokeColor=#526173;endArrow=block;endFill=1;jumpStyle=arc;jumpSize=12;exitX=0.5;exitY=1;exitPerimeter=0;entryX=0.5;entryY=0;entryPerimeter=0;fontFamily=Verdana;" target="C">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="top_3" edge="1" parent="1" source="C" style="edgeStyle=none;rounded=0;html=0;strokeWidth=2;strokeColor=#526173;endArrow=block;endFill=1;jumpStyle=arc;jumpSize=12;exitX=0.5;exitY=1;exitPerimeter=0;entryX=0.5;entryY=0;entryPerimeter=0;fontFamily=Verdana;" target="R">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="top_4" edge="1" parent="1" source="R" style="edgeStyle=none;rounded=0;html=0;strokeWidth=2;strokeColor=#526173;endArrow=block;endFill=1;jumpStyle=arc;jumpSize=12;exitX=0.5;exitY=1;exitPerimeter=0;entryX=0.5;entryY=0;entryPerimeter=0;fontFamily=Verdana;" target="TYPE">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="type_takeoff" edge="1" parent="1" source="TYPE" style="edgeStyle=none;rounded=0;html=0;strokeWidth=2;strokeColor=#526173;endArrow=block;endFill=1;jumpStyle=arc;jumpSize=12;exitX=0;exitY=0.5;exitPerimeter=0;entryX=0.5;entryY=0;entryPerimeter=0;fontFamily=Verdana;" target="D">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="330" y="870" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="type_takeoff_label" parent="1" style="shape=text;whiteSpace=wrap;html=0;rounded=0;fillColor=#ffffff;strokeColor=#ffffff;strokeWidth=2;fontFamily=Verdana;fontSize=20;fontColor=#203044;align=center;verticalAlign=middle;spacing=8;strokeColor=none;fillColor=none;spacing=2;fillColor=#ffffff;" value="TAKEOFF" vertex="1">
+          <mxGeometry height="34" width="150" x="440" y="820" as="geometry" />
+        </mxCell>
+        <mxCell id="type_fly" edge="1" parent="1" source="TYPE" style="edgeStyle=none;rounded=0;html=0;strokeWidth=2;strokeColor=#526173;endArrow=block;endFill=1;jumpStyle=arc;jumpSize=12;exitX=0.5;exitY=1;exitPerimeter=0;entryX=0.5;entryY=0;entryPerimeter=0;fontFamily=Verdana;" target="FLY_CHECK">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="type_fly_label" parent="1" style="shape=text;whiteSpace=wrap;html=0;rounded=0;fillColor=#ffffff;strokeColor=#ffffff;strokeWidth=2;fontFamily=Verdana;fontSize=20;fontColor=#203044;align=center;verticalAlign=middle;spacing=8;strokeColor=none;fillColor=none;spacing=2;fillColor=#ffffff;" value="FLY" vertex="1">
+          <mxGeometry height="34" width="100" x="1050" y="1010" as="geometry" />
+        </mxCell>
+        <mxCell id="type_land" edge="1" parent="1" source="TYPE" style="edgeStyle=none;rounded=0;html=0;strokeWidth=2;strokeColor=#526173;endArrow=block;endFill=1;jumpStyle=arc;jumpSize=12;exitX=1;exitY=0.5;exitPerimeter=0;entryX=0.5;entryY=0;entryPerimeter=0;fontFamily=Verdana;" target="LAND_CHECK">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1740" y="870" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="type_land_label" parent="1" style="shape=text;whiteSpace=wrap;html=0;rounded=0;fillColor=#ffffff;strokeColor=#ffffff;strokeWidth=2;fontFamily=Verdana;fontSize=20;fontColor=#203044;align=center;verticalAlign=middle;spacing=8;strokeColor=none;fillColor=none;spacing=2;fillColor=#ffffff;" value="LAND" vertex="1">
+          <mxGeometry height="34" width="150" x="1430" y="820" as="geometry" />
+        </mxCell>
+        <mxCell id="takeoff_ok" edge="1" parent="1" source="D" style="edgeStyle=none;rounded=0;html=0;strokeWidth=2;strokeColor=#526173;endArrow=block;endFill=1;jumpStyle=arc;jumpSize=12;exitX=0.5;exitY=1;exitPerimeter=0;entryX=0.5;entryY=0;fontFamily=Verdana;entryDx=0;entryDy=0;" target="TAKEOFF">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="330" y="1350" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="takeoff_ok_label" parent="1" style="shape=text;whiteSpace=wrap;html=0;rounded=0;fillColor=#ffffff;strokeColor=#ffffff;strokeWidth=2;fontFamily=Verdana;fontSize=23;fontColor=#203044;align=center;verticalAlign=middle;spacing=8;strokeColor=none;fillColor=none;spacing=2;fillColor=#ffffff;" value="Có" vertex="1">
+          <mxGeometry height="54" width="81" x="333" y="1404" as="geometry" />
+        </mxCell>
+        <mxCell id="fly_ok" edge="1" parent="1" source="FLY_CHECK" style="edgeStyle=none;rounded=0;html=0;strokeWidth=2;strokeColor=#526173;endArrow=block;endFill=1;jumpStyle=arc;jumpSize=12;exitX=0.5;exitY=1;exitPerimeter=0;entryX=0.5;entryY=0;fontFamily=Verdana;entryDx=0;entryDy=0;" target="FLY">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1040" y="1350" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="fly_ok_label" parent="1" style="shape=text;whiteSpace=wrap;html=0;rounded=0;fillColor=#ffffff;strokeColor=#ffffff;strokeWidth=2;fontFamily=Verdana;fontSize=23;fontColor=#203044;align=center;verticalAlign=middle;spacing=8;strokeColor=none;fillColor=none;spacing=2;fillColor=#ffffff;" value="Có" vertex="1">
+          <mxGeometry height="34" width="100" x="1047" y="1404" as="geometry" />
+        </mxCell>
+        <mxCell id="land_ok" edge="1" parent="1" source="LAND_CHECK" style="edgeStyle=none;rounded=0;html=0;strokeWidth=2;strokeColor=#526173;endArrow=block;endFill=1;jumpStyle=arc;jumpSize=12;exitX=0.5;exitY=1;exitPerimeter=0;entryX=0.5;entryY=0;entryPerimeter=0;fontFamily=Verdana;" target="LAND">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="land_ok_label" parent="1" style="shape=text;whiteSpace=wrap;html=0;rounded=0;fillColor=#ffffff;strokeColor=#ffffff;strokeWidth=2;fontFamily=Verdana;fontSize=23;fontColor=#203044;align=center;verticalAlign=middle;spacing=8;strokeColor=none;fillColor=none;spacing=2;fillColor=#ffffff;" value="Có" vertex="1">
+          <mxGeometry height="34" width="100" x="1761" y="1404" as="geometry" />
+        </mxCell>
+        <mxCell id="takeoff_reject" edge="1" parent="1" source="D" style="edgeStyle=none;rounded=0;html=0;strokeWidth=2;strokeColor=#526173;endArrow=block;endFill=1;jumpStyle=arc;jumpSize=12;exitX=0;exitY=0.5;exitPerimeter=0;entryX=0;entryY=0.5;entryPerimeter=0;fontFamily=Verdana;" target="E">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="25" y="1190" />
+              <mxPoint x="25" y="705" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="takeoff_reject_label" parent="1" style="shape=text;whiteSpace=wrap;html=0;rounded=0;fillColor=#ffffff;strokeColor=#ffffff;strokeWidth=2;fontFamily=Verdana;fontSize=20;fontColor=#203044;align=center;verticalAlign=middle;spacing=8;strokeColor=none;fillColor=none;spacing=2;fillColor=#ffffff;" value="Không" vertex="1">
+          <mxGeometry height="34" width="100" x="27" y="1128" as="geometry" />
+        </mxCell>
+        <mxCell id="fly_reject" edge="1" parent="1" source="FLY_CHECK" style="edgeStyle=none;rounded=0;html=0;strokeWidth=2;strokeColor=#526173;endArrow=block;endFill=1;jumpStyle=arc;jumpSize=12;exitX=0;exitY=0.5;exitPerimeter=0;entryX=0;entryY=0.5;entryPerimeter=0;fontFamily=Verdana;" target="E">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="725" y="1190" />
+              <mxPoint x="725" y="1386" />
+              <mxPoint x="18" y="1377" />
+              <mxPoint x="25" y="1020" />
+              <mxPoint x="25" y="705" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="fly_reject_label" parent="1" style="shape=text;whiteSpace=wrap;html=0;rounded=0;fillColor=#ffffff;strokeColor=#ffffff;strokeWidth=2;fontFamily=Verdana;fontSize=20;fontColor=#203044;align=center;verticalAlign=middle;spacing=8;strokeColor=none;fillColor=none;spacing=2;fillColor=#ffffff;" value="Không" vertex="1">
+          <mxGeometry height="34" width="100" x="675" y="1203" as="geometry" />
+        </mxCell>
+        <mxCell id="reject_wait" edge="1" parent="1" source="E" style="edgeStyle=none;rounded=0;html=0;strokeWidth=2;strokeColor=#526173;endArrow=block;endFill=1;jumpStyle=arc;jumpSize=12;exitX=0.5;exitY=0;exitPerimeter=0;entryX=0;entryY=0.5;entryPerimeter=0;fontFamily=Verdana;" target="C">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="265" y="545" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="land_already" edge="1" parent="1" source="LAND_CHECK" style="edgeStyle=none;rounded=0;html=0;strokeWidth=2;strokeColor=#526173;endArrow=block;endFill=1;jumpStyle=arc;jumpSize=12;exitX=1;exitY=0.5;exitPerimeter=0;entryX=0;entryY=0.5;entryPerimeter=0;fontFamily=Verdana;" target="E" value="Không đủ điều kiện gửi">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="takeoff_loop" edge="1" parent="1" source="TAKEOFF" style="edgeStyle=none;rounded=0;html=0;strokeWidth=2;strokeColor=#526173;endArrow=block;endFill=1;jumpStyle=arc;jumpSize=12;exitX=0.5;exitY=1;exitPerimeter=0;entryX=0.5;entryY=0;entryPerimeter=0;fontFamily=Verdana;" target="G">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="330" y="1700" />
+              <mxPoint x="1040" y="1700" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="fly_loop" edge="1" parent="1" source="FLY" style="edgeStyle=none;rounded=0;html=0;strokeWidth=2;strokeColor=#526173;endArrow=block;endFill=1;jumpStyle=arc;jumpSize=12;exitX=0.5;exitY=1;exitPerimeter=0;entryX=0.5;entryY=0;entryPerimeter=0;fontFamily=Verdana;" target="G">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="land_ground" edge="1" parent="1" source="LAND" style="edgeStyle=none;rounded=0;html=0;strokeWidth=2;strokeColor=#526173;endArrow=block;endFill=1;jumpStyle=arc;jumpSize=12;exitX=0.5;exitY=1;exitPerimeter=0;entryX=0.5;entryY=1;fontFamily=Verdana;entryDx=0;entryDy=0;" target="C" value="armed=false + ON_GROUND mới">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1740" y="1580" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="loop_offboard" edge="1" parent="1" source="G" style="edgeStyle=none;rounded=0;html=0;strokeWidth=2;strokeColor=#526173;endArrow=block;endFill=1;jumpStyle=arc;jumpSize=12;exitX=0.5;exitY=1;exitPerimeter=0;entryX=0.5;entryY=0;entryPerimeter=0;fontFamily=Verdana;" target="H">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="offboard_yes" edge="1" parent="1" source="H" style="edgeStyle=none;rounded=0;html=0;strokeWidth=2;strokeColor=#526173;endArrow=block;endFill=1;jumpStyle=arc;jumpSize=12;exitX=1;exitY=0.5;exitPerimeter=0;entryX=0;entryY=0.5;entryPerimeter=0;fontFamily=Verdana;" target="I">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="offboard_yes_label" parent="1" style="shape=text;whiteSpace=wrap;html=0;rounded=0;fillColor=#ffffff;strokeColor=#ffffff;strokeWidth=2;fontFamily=Verdana;fontSize=20;fontColor=#203044;align=center;verticalAlign=middle;spacing=8;strokeColor=none;fillColor=none;spacing=2;fillColor=#ffffff;" value="Có" vertex="1">
+          <mxGeometry height="34" width="100" x="1350" y="1940" as="geometry" />
+        </mxCell>
+        <mxCell id="offboard_wait" edge="1" parent="1" source="I" style="edgeStyle=none;rounded=0;html=0;strokeWidth=2;strokeColor=#526173;endArrow=block;endFill=1;jumpStyle=arc;jumpSize=12;exitX=1;exitY=0.5;exitPerimeter=0;entryX=1;entryY=0.5;entryPerimeter=0;fontFamily=Verdana;" target="C">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2600" y="1985" />
+              <mxPoint x="2600" y="545" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="offboard_no" edge="1" parent="1" source="H" style="edgeStyle=none;rounded=0;html=0;strokeWidth=2;strokeColor=#526173;endArrow=block;endFill=1;jumpStyle=arc;jumpSize=12;exitX=0.5;exitY=1;exitPerimeter=0;entryX=0.5;entryY=0;entryPerimeter=0;fontFamily=Verdana;" target="J">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="offboard_no_label" parent="1" style="shape=text;whiteSpace=wrap;html=0;rounded=0;fillColor=#ffffff;strokeColor=#ffffff;strokeWidth=2;fontFamily=Verdana;fontSize=20;fontColor=#203044;align=center;verticalAlign=middle;spacing=8;strokeColor=none;fillColor=none;spacing=2;fillColor=#ffffff;" value="Không" vertex="1">
+          <mxGeometry height="34" width="100" x="1047" y="2085" as="geometry" />
+        </mxCell>
+        <mxCell id="emergency_yes" edge="1" parent="1" source="J" style="edgeStyle=none;rounded=0;html=0;strokeWidth=2;strokeColor=#526173;endArrow=block;endFill=1;jumpStyle=arc;jumpSize=12;exitX=1;exitY=0.5;exitPerimeter=0;entryX=0;entryY=0.5;entryPerimeter=0;fontFamily=Verdana;" target="K">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="emergency_yes_label" parent="1" style="shape=text;whiteSpace=wrap;html=0;rounded=0;fillColor=#ffffff;strokeColor=#ffffff;strokeWidth=2;fontFamily=Verdana;fontSize=20;fontColor=#203044;align=center;verticalAlign=middle;spacing=8;strokeColor=none;fillColor=none;spacing=2;fillColor=#ffffff;" value="Có" vertex="1">
+          <mxGeometry height="34" width="100" x="1350" y="2170" as="geometry" />
+        </mxCell>
+        <mxCell id="emergency_ground" edge="1" parent="1" source="K" style="edgeStyle=none;rounded=0;html=0;strokeWidth=2;strokeColor=#526173;endArrow=block;endFill=1;jumpStyle=arc;jumpSize=12;exitX=1;exitY=0.5;exitPerimeter=0;fontFamily=Verdana;" target="C" value="Giám sát; không tự giành quyền">
+          <mxGeometry relative="1" x="-0.6837" as="geometry">
+            <Array as="points">
+              <mxPoint x="2050" y="2220" />
+              <mxPoint x="2601" y="2223" />
+              <mxPoint x="2601" y="1908" />
+              <mxPoint x="2601" y="981" />
+              <mxPoint x="2601" y="549" />
+            </Array>
+            <mxPoint x="1296" y="545" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="emergency_no" edge="1" parent="1" source="J" style="edgeStyle=none;rounded=0;html=0;strokeWidth=2;strokeColor=#526173;endArrow=block;endFill=1;jumpStyle=arc;jumpSize=12;exitX=0.5;exitY=1;exitPerimeter=0;fontFamily=Verdana;" target="L">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1040" y="2421" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="emergency_no_label" parent="1" style="shape=text;whiteSpace=wrap;html=0;rounded=0;fillColor=#ffffff;strokeColor=#ffffff;strokeWidth=2;fontFamily=Verdana;fontSize=20;fontColor=#203044;align=center;verticalAlign=middle;spacing=8;strokeColor=none;fillColor=none;spacing=2;fillColor=#ffffff;" value="Không" vertex="1">
+          <mxGeometry height="34" width="100" x="1047" y="2315" as="geometry" />
+        </mxCell>
+        <mxCell id="compute_output" edge="1" parent="1" source="L" style="edgeStyle=none;rounded=0;html=0;strokeWidth=2;strokeColor=#526173;endArrow=block;endFill=1;jumpStyle=arc;jumpSize=12;exitX=0.5;exitY=1;exitPerimeter=0;fontFamily=Verdana;" target="N">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1040" y="2646" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="output_target" edge="1" parent="1" source="N" style="edgeStyle=none;rounded=0;html=0;strokeWidth=2;strokeColor=#526173;endArrow=block;endFill=1;jumpStyle=arc;jumpSize=12;exitX=0.5;exitY=1;exitPerimeter=0;fontFamily=Verdana;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="O">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1040" y="2862" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="target_no" edge="1" parent="1" source="O" style="edgeStyle=none;rounded=0;html=0;strokeWidth=2;strokeColor=#526173;endArrow=block;endFill=1;jumpStyle=arc;jumpSize=12;exitX=0;exitY=0.5;exitPerimeter=0;entryX=0;entryY=0.5;entryPerimeter=0;fontFamily=Verdana;" target="G">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="680" y="3070" />
+              <mxPoint x="680" y="1790" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="target_no_label" parent="1" style="shape=text;whiteSpace=wrap;html=0;rounded=0;fillColor=#ffffff;strokeColor=#ffffff;strokeWidth=2;fontFamily=Verdana;fontSize=20;fontColor=#203044;align=center;verticalAlign=middle;spacing=8;strokeColor=none;fillColor=none;spacing=2;fillColor=#ffffff;" value="Chưa" vertex="1">
+          <mxGeometry height="34" width="90" x="682" y="3025" as="geometry" />
+        </mxCell>
+        <mxCell id="target_yes" edge="1" parent="1" source="O" style="edgeStyle=none;rounded=0;html=0;strokeWidth=2;strokeColor=#526173;endArrow=block;endFill=1;jumpStyle=arc;jumpSize=12;exitX=1;exitY=0.5;exitPerimeter=0;entryX=0;entryY=0.5;entryPerimeter=0;fontFamily=Verdana;" target="P">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="target_yes_label" parent="1" style="shape=text;whiteSpace=wrap;html=0;rounded=0;fillColor=#ffffff;strokeColor=#ffffff;strokeWidth=2;fontFamily=Verdana;fontSize=20;fontColor=#203044;align=center;verticalAlign=middle;spacing=8;strokeColor=none;fillColor=none;spacing=2;fillColor=#ffffff;" value="Rồi" vertex="1">
+          <mxGeometry height="34" width="100" x="1350" y="3020" as="geometry" />
+        </mxCell>
+        <mxCell id="hold_check" edge="1" parent="1" source="P" style="edgeStyle=none;rounded=0;html=0;strokeWidth=2;strokeColor=#526173;endArrow=block;endFill=1;jumpStyle=arc;jumpSize=12;exitX=0.5;exitY=1;exitPerimeter=0;entryX=0.5;entryY=0;entryPerimeter=0;fontFamily=Verdana;" target="HOLD_CHECK">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="hold_stable_label" parent="1" style="shape=text;whiteSpace=wrap;html=0;rounded=0;fillColor=#ffffff;strokeColor=#ffffff;strokeWidth=2;fontFamily=Verdana;fontSize=20;fontColor=#203044;align=center;verticalAlign=middle;spacing=8;strokeColor=none;fillColor=none;spacing=2;fillColor=#ffffff;" value="HOLD đến lệnh mới" vertex="1">
+          <mxGeometry height="34" width="100" x="2030" y="3245" as="geometry" />
+        </mxCell>
+        <mxCell id="complete_wait" edge="1" parent="1" source="HOLD_CHECK" style="edgeStyle=none;rounded=0;html=0;strokeWidth=2;strokeColor=#526173;endArrow=block;endFill=1;jumpStyle=arc;jumpSize=12;exitX=1;exitY=0.5;entryX=1;entryY=0.5;entryPerimeter=0;fontFamily=Verdana;exitDx=0;exitDy=0;" target="C" value="HOLD đã xác nhận">
+          <mxGeometry relative="1" x="0.0167" as="geometry">
+            <Array as="points">
+              <mxPoint x="2600" y="3285" />
+              <mxPoint x="2600" y="545" />
+            </Array>
+            <mxPoint x="1990" y="3510" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ARM_ONLY" value="ARM: IDLE/disarmed, ON_GROUND&#10;preflight; chờ armed=true mới&#10;Không yêu cầu cất cánh" style="shape=rectangle;whiteSpace=wrap;html=0;rounded=0;fillColor=#edf3fc;strokeColor=#4b6585;strokeWidth=2;fontFamily=Verdana;fontSize=22;fontColor=#203044;align=center;verticalAlign=middle;spacing=8;" vertex="1" parent="1">
+          <mxGeometry as="geometry" x="70" y="800" width="500" height="145" />
+        </mxCell>
+        <mxCell id="DISARM_FORCE" value="DISARM: dừng motor cưỡng bức&#10;Chờ armed=false + ON_GROUND&#10;Trên không có thể rơi" style="shape=rectangle;whiteSpace=wrap;html=0;rounded=0;fillColor=#edf3fc;strokeColor=#4b6585;strokeWidth=2;fontFamily=Verdana;fontSize=22;fontColor=#203044;align=center;verticalAlign=middle;spacing=8;" vertex="1" parent="1">
+          <mxGeometry as="geometry" x="2150" y="790" width="420" height="145" />
+        </mxCell>
+        <mxCell id="type_arm" source="TYPE" target="ARM_ONLY" value="ARM" style="edgeStyle=none;rounded=0;html=0;strokeWidth=2;strokeColor=#526173;endArrow=block;endFill=1;jumpStyle=arc;jumpSize=12;exitX=0.5;exitY=1;exitPerimeter=0;entryX=0.5;entryY=0;entryPerimeter=0;fontFamily=Verdana;" edge="1" parent="1">
+          <mxGeometry as="geometry" relative="1" />
+        </mxCell>
+        <mxCell id="arm_wait" source="ARM_ONLY" target="C" value="ARMED hoặc lỗi được ghi rõ" style="edgeStyle=none;rounded=0;html=0;strokeWidth=2;strokeColor=#526173;endArrow=block;endFill=1;jumpStyle=arc;jumpSize=12;exitX=0.5;exitY=1;exitPerimeter=0;entryX=0.5;entryY=0;entryPerimeter=0;fontFamily=Verdana;" edge="1" parent="1">
+          <mxGeometry as="geometry" relative="1" />
+        </mxCell>
+        <mxCell id="type_disarm" source="TYPE" target="DISARM_FORCE" value="DISARM, ưu tiên qua khóa đích" style="edgeStyle=none;rounded=0;html=0;strokeWidth=2;strokeColor=#526173;endArrow=block;endFill=1;jumpStyle=arc;jumpSize=12;exitX=0.5;exitY=1;exitPerimeter=0;entryX=0.5;entryY=0;entryPerimeter=0;fontFamily=Verdana;" edge="1" parent="1">
+          <mxGeometry as="geometry" relative="1" />
+        </mxCell>
+        <mxCell id="disarm_wait" source="DISARM_FORCE" target="C" value="IDLE khi đã xác nhận trên đất" style="edgeStyle=none;rounded=0;html=0;strokeWidth=2;strokeColor=#526173;endArrow=block;endFill=1;jumpStyle=arc;jumpSize=12;exitX=0.5;exitY=1;exitPerimeter=0;entryX=0.5;entryY=0;entryPerimeter=0;fontFamily=Verdana;" edge="1" parent="1">
+          <mxGeometry as="geometry" relative="1" />
+        </mxCell>
+        <mxCell id="hold_failure_land" source="HOLD_CHECK" target="LAND" value="HOLD lỗi / timeout" style="edgeStyle=none;rounded=0;html=0;strokeWidth=2;strokeColor=#526173;endArrow=block;endFill=1;jumpStyle=arc;jumpSize=12;exitX=0.5;exitY=1;exitPerimeter=0;entryX=0.5;entryY=0;entryPerimeter=0;fontFamily=Verdana;" edge="1" parent="1">
+          <mxGeometry as="geometry" relative="1" />
+        </mxCell>
+        <mxCell id="hold_pending" source="HOLD_CHECK" target="HOLD_CHECK" value="Chờ telemetry, tối đa 5 s" style="edgeStyle=none;rounded=0;html=0;strokeWidth=2;strokeColor=#526173;endArrow=block;endFill=1;jumpStyle=arc;jumpSize=12;exitX=0.5;exitY=1;exitPerimeter=0;entryX=0.5;entryY=0;entryPerimeter=0;fontFamily=Verdana;" edge="1" parent="1">
+          <mxGeometry as="geometry" relative="1" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="local-ned-fsm" name="FSM local NED — triển khai hiện tại">
+    <mxGraphModel dx="1600" dy="1800" grid="1" page="1" pageWidth="1700" pageHeight="1900">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" value="FSM + GIÁM SÁT ĐÍCH; PX4 GIỮ VÒNG ĐIỀU KHIỂN" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#edf3fc;strokeColor=#4b6585;fontSize=18;" vertex="1" parent="1">
+          <mxGeometry x="220" y="20" width="1250" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="idle" value="IDLE&#10;Disarmed / ON_GROUND" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#edf3fc;strokeColor=#4b6585;fontSize=18;" vertex="1" parent="1">
+          <mxGeometry x="160" y="140" width="280" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="armed" value="ARMED&#10;Không Offboard / không lên cao" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#edf3fc;strokeColor=#4b6585;fontSize=18;" vertex="1" parent="1">
+          <mxGeometry x="600" y="140" width="280" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="takeoff" value="TAKEOFF&#10;Đích khóa, PX4 OFFBOARD" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#edf3fc;strokeColor=#4b6585;fontSize=18;" vertex="1" parent="1">
+          <mxGeometry x="160" y="350" width="280" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="fly" value="FLY&#10;Đích khóa, PX4 OFFBOARD" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#edf3fc;strokeColor=#4b6585;fontSize=18;" vertex="1" parent="1">
+          <mxGeometry x="1070" y="350" width="280" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="settle" value="SETTLING&#10;Trong ngưỡng vị trí/yaw + dwell" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#edf3fc;strokeColor=#4b6585;fontSize=18;" vertex="1" parent="1">
+          <mxGeometry x="600" y="560" width="280" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="request" value="HOLD_REQUESTED&#10;Chờ mode mới, không chỉ ACK" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#edf3fc;strokeColor=#4b6585;fontSize=18;" vertex="1" parent="1">
+          <mxGeometry x="600" y="770" width="280" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="hold" value="HOLD&#10;PX4 HOLD vô thời hạn" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#edf3fc;strokeColor=#4b6585;fontSize=18;" vertex="1" parent="1">
+          <mxGeometry x="600" y="980" width="280" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="input" value="FLY_READY&#10;Cho nhập x/y, PX4 vẫn HOLD" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#edf3fc;strokeColor=#4b6585;fontSize=18;" vertex="1" parent="1">
+          <mxGeometry x="1070" y="980" width="280" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="land" value="LAND_REQUESTED / LANDING&#10;Cùng API trên đất và khi bay" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#edf3fc;strokeColor=#4b6585;fontSize=18;" vertex="1" parent="1">
+          <mxGeometry x="160" y="1250" width="280" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="stop" value="DISARM_REQUESTED&#10;Dừng motor cưỡng bức mọi độ cao" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#edf3fc;strokeColor=#4b6585;fontSize=18;" vertex="1" parent="1">
+          <mxGeometry x="1070" y="1250" width="280" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="end" value="IDLE khi telemetry mới:&#10;armed=false + ON_GROUND" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#edf3fc;strokeColor=#4b6585;fontSize=18;" vertex="1" parent="1">
+          <mxGeometry x="600" y="1460" width="280" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="external" value="EXTERNAL / TERMINATION&#10;Không tự ARM hoặc giành lại mode" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#edf3fc;strokeColor=#4b6585;fontSize=18;" vertex="1" parent="1">
+          <mxGeometry x="600" y="1640" width="280" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" value="arm + xác nhận" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1" source="idle" target="armed">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" value="takeoff" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1" source="idle" target="takeoff">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" value="takeoff, không ARM lại" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1" source="armed" target="takeoff">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" value="trong ngưỡng" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1" source="takeoff" target="settle">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" value="trong ngưỡng" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1" source="fly" target="settle">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" value="đủ dwell mẫu mới" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1" source="settle" target="request">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e7" value="PX4 HOLD mới" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1" source="request" target="hold">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e8" value="fly" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1" source="hold" target="input">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e9" value="x y" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1" source="input" target="fly">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e10" value="fly x y" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1" source="hold" target="fly">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e11" value="target timeout" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1" source="takeoff" target="request">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e12" value="target timeout" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1" source="fly" target="request">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e15" value="land (ưu tiên qua khóa)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1" source="hold" target="land">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e16" value="land" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1" source="fly" target="land">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e17" value="land" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1" source="takeoff" target="land">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e18" value="disarm" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1" source="armed" target="stop">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e19" value="disarm: có thể rơi" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1" source="fly" target="stop">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e20" value="chạm đất + disarm" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1" source="land" target="end">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e21" value="xác nhận; không chỉ ACK" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1" source="stop" target="end">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e22" value="mode ngoài ý muốn" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1" source="hold" target="external">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e23" value="mất liên kết / tiếp quản" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1" source="fly" target="external">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e24" value="HOLD lỗi/timeout" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1" source="request" target="land">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e25" value="ra ngoài ngưỡng TAKEOFF" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1" source="settle" target="takeoff">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e26" value="ra ngoài ngưỡng FLY" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1" source="settle" target="fly">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="note" value="Pi giám sát acceptance/dwell; không phải PX4 waypoint ACK.&#10;HOLD giữ tới lệnh mới; tọa độ trần chỉ nhận ở FLY_READY.&#10;LAND/DISARM đi qua khóa đích khi console xử lý lệnh.&#10;Sơ đồ rút gọn; xem FLIGHT_STATES.md và status để xác nhận trạng thái." style="rounded=1;whiteSpace=wrap;html=0;fillColor=#edf3fc;strokeColor=#4b6585;fontSize=18;" vertex="1" parent="1">
+          <mxGeometry x="80" y="1750" width="1450" height="115" as="geometry" />
+        </mxCell>
+        <mxCell id="e27" source="armed" target="land" value="land" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1">
+          <mxGeometry as="geometry" relative="1" />
+        </mxCell>
+        <mxCell id="e28" source="takeoff" target="stop" value="disarm" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1">
+          <mxGeometry as="geometry" relative="1" />
+        </mxCell>
+        <mxCell id="e29" source="hold" target="stop" value="disarm" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1">
+          <mxGeometry as="geometry" relative="1" />
+        </mxCell>
+        <mxCell id="e30" source="end" target="idle" value="Sẵn sàng kiểm tra cho lệnh mới" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1">
+          <mxGeometry as="geometry" relative="1" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

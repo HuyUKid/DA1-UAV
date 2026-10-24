@@ -574,6 +574,99 @@ class ControllerTests(unittest.TestCase):
         self.assertAlmostEqual(status['target_error_ned_m']['north_m'], 1.0)
         self.assertAlmostEqual(status['target_error_ned_m']['east_m'], -2.0)
 
+    def test_fly_absolute_targets_across_legs_never_accumulate_position_or_height(self):
+        self.put('local_ned', dict(north_m=10.0, east_m=5.0, down_m=7.0))
+        self.held()
+        fixed_down = self.fc.target['down_m']
+        self.assertEqual(fixed_down, 5.0)
+        for north, east in ((1, 2), (1, 2), (-3, 4)):
+            with self.subTest(target=(north, east)):
+                execute(self.fc, f'fly {north} {east}', output=lambda _: None)
+                sent = self.fc.offboard.set_position_ned.call_args.args[0]
+                self.assertEqual((sent.north_m, sent.east_m, sent.down_m),
+                                 (north, east, fixed_down))
+                target = dict(self.fc.target)
+                self.put('local_ned', dict(north_m=north + 2, east_m=east - 3,
+                                           down_m=fixed_down + 0.8))
+                self.advance(0.2)
+                self.fc.refresh()
+                self.assertEqual(self.fc.target, target)
+                self.assertEqual(self.fc.phase, 'FLY')
+                self.arrive()
+        self.fc.action.arm.assert_called_once()
+        self.assertEqual(self.fc.offboard.set_position_ned.call_count, 4)
+
+    def test_new_coordinates_stay_locked_through_fly_settling_and_hold_confirmation(self):
+        self.held()
+        self.fc.fly(1, 2)
+        target = dict(self.fc.target)
+        sent = self.fc.offboard.set_position_ned.call_count
+        def reject_new_targets(expected_phase):
+            self.assertEqual(self.fc.phase, expected_phase)
+            for line in ('fly 8 9', '8 9', 'fly', 'takeoff'):
+                with self.subTest(phase=expected_phase, line=line), self.assertRaises(ValueError):
+                    execute(self.fc, line, output=lambda _: None)
+            self.assertEqual(self.fc.target, target)
+            self.assertEqual(self.fc.offboard.set_position_ned.call_count, sent)
+        reject_new_targets('FLY')
+        self.put('local_ned', {k: target[k] for k in ('north_m', 'east_m', 'down_m')})
+        self.advance(0.2)
+        self.fc.refresh()
+        reject_new_targets('SETTLING')
+        self.fc.action.hold.side_effect = None  # ACK without a new HOLD mode.
+        for _ in range(5):
+            self.advance(0.2)
+            self.fc.refresh()
+        reject_new_targets('HOLD_REQUESTED')
+        self.put('flight_mode', 'HOLD')
+        self.fc.refresh()
+        self.assertEqual(self.fc.phase, 'HOLD')
+        self.assertTrue(self.fc.ready_for_fly())
+
+    def test_passing_fly_target_then_overshooting_resets_arrival_dwell(self):
+        self.held()
+        self.fc.fly(1, 2)
+        target = dict(self.fc.target)
+        hold_count = self.fc.action.hold.call_count
+        self.put('local_ned', {k: target[k] for k in ('north_m', 'east_m', 'down_m')})
+        self.fc.refresh()
+        self.advance(0.2)
+        self.fc.refresh()
+        self.assertEqual(self.fc.phase, 'SETTLING')
+        self.put('local_ned', dict(north_m=2.0, east_m=2.0, down_m=target['down_m']))
+        for _ in range(5):
+            self.advance(0.2)
+            self.fc.refresh()
+        self.assertEqual(self.fc.phase, 'FLY')
+        self.assertFalse(self.fc.target_reached)
+        self.assertIsNone(self.fc.arrival.since)
+        self.assertEqual(self.fc.action.hold.call_count, hold_count)
+        self.assertEqual(self.fc.target, target)
+        self.arrive()
+        self.assertTrue(self.fc.target_reached)
+
+    def test_fly_timeout_holds_without_reporting_success_or_retrying_target(self):
+        self.held()
+        self.fc.fly(1, 2)
+        target = dict(self.fc.target)
+        sent = self.fc.offboard.set_position_ned.call_count
+        self.advance(10.1)
+        self.fc.refresh()
+        self.fc.refresh()
+        self.assertEqual(self.fc.phase, 'HOLD')
+        self.assertEqual(self.fc.hold_reason, 'TARGET_TIMEOUT')
+        self.assertFalse(self.fc.target_reached)
+        self.assertTrue(self.fc.takeoff_complete)
+        self.advance(100)
+        self.fc.refresh()
+        self.assertEqual(self.fc.target, target)
+        self.assertEqual(self.fc.offboard.set_position_ned.call_count, sent)
+        self.fc.fly(3, 4)
+        self.assertEqual(self.fc.target['north_m'], 3)
+        self.assertEqual(self.fc.target['east_m'], 4)
+        self.assertEqual(self.fc.target['down_m'], target['down_m'])
+        self.fc.action.arm.assert_called_once()
+
     def test_nonfinite_status_does_not_crash_or_complete_arrival(self):
         import json
         self.takeoff()

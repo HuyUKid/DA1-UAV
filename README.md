@@ -143,7 +143,7 @@ python3 -B -m unittest discover -s simulation/tests -p 'test_*.py'
 python3 simulation/x500/check_setup.py --static
 ```
 
-Hiện có 67 test Pi và 19 test model/công cụ mô phỏng. Các bài này không
+Hiện có 71 test Pi và 19 test model/công cụ mô phỏng. Các bài này không
 mở UART, không gửi lệnh motor và không cần cài Gazebo. Smoke test HITL là
 bài riêng trong hướng dẫn mô phỏng, không chạy qua unittest discover.
 

@@ -64,6 +64,41 @@ hoặc DISARM và bắt đầu lại từ trạng thái mặt đất đã xác n
 hạn sau một TAKEOFF đã hoàn tất, người dùng có thể chọn FLY tường minh
 để gửi đích mới từ HOLD; không tự tiếp tục đích quá hạn.
 
+## Bước FLY: đặt đích và giới hạn kiểm chứng
+
+Giữ quy ước x/y tuyệt đối theo gốc EKF. `fly 1 2` gửi north=1, east=2;
+không cộng mốc cất cánh hoặc vị trí hiện tại vào hai số này. Z và yaw giữ
+từ đích TAKEOFF, không trừ thêm height sau mỗi chặng. Vì vậy không có
+phép cộng dồn đích x/y hoặc tính lại độ cao theo vị trí đang trôi.
+
+Quy trình hiện tại:
+
+1. Yêu cầu TAKEOFF đã hoàn tất, HOLD được xác nhận, còn kết nối, ARMED,
+   IN_AIR, dữ liệu trạng thái mới và health đạt.
+2. Kiểm tra đầu vào x/y hữu hạn trong ±10000 m; gửi một đích cố định,
+   prestream và chờ xác nhận OFFBOARD. Không ARM lại khi bắt đầu FLY.
+3. Khóa đích trong FLY/SETTLING/HOLD_REQUESTED; tọa độ mới bị từ chối,
+   không xếp hàng. LAND/DISARM vẫn đi qua khóa đích.
+4. Giám sát sai số ngang theo vector, z và yaw trên mẫu mới đủ dwell.
+   Đi qua đích một lần rồi ra ngoài ngưỡng sẽ xóa dwell, không báo tới đích.
+5. Yêu cầu native HOLD, chờ mode mới. Hết deadline yêu cầu HOLD với
+   `target_reached=false`; không tự gửi lại hoặc tiếp tục đích quá hạn.
+
+Đã bổ sung bốn test hồi quy dùng mock: nhiều chặng từ mốc ban đầu khác 0
+không cộng dồn x/y/z; khóa tọa độ qua FLY/SETTLING/chờ HOLD; đi qua rồi
+vượt khỏi vùng đích không hoàn thành dwell; timeout FLY không báo thành
+công hoặc tự thử lại.
+
+**Đúng đích gửi không đồng nghĩa bảo đảm không vượt đích khi bay thật.**
+Khoảng ±10000 m là giới hạn giá trị đầu vào, không phải giới hạn chiều
+dài một chặng. Pi chưa chặn riêng khoảng cách từ vị trí hiện tại tới đích,
+chưa kiểm tra hành lang bay hoặc đặt cơ chế phanh riêng. PX4 thực hiện
+vòng điều khiển và giới hạn động học theo cấu hình trên bo. Ngưỡng ngang
+0,5 m chỉ dùng xác nhận tới đích, không tạo rào cứng giữ UAV trong bán kính
+đó và không bảo đảm vận tốc bằng 0. Native HOLD phanh/giữ tại vị trí lúc
+chuyển mode. Muốn đánh giá vượt đích vật lý phải chạy HITL/đo thực tế và
+đối chiếu quỹ đạo, vận tốc, heading, estimator và đầu ra motor trong log.
+
 ## Tham số Pi
 
 | Cờ CLI / trường policy | Mặc định | Giới hạn cấu hình |

@@ -9,6 +9,7 @@ import unittest
 from unittest.mock import Mock, patch
 from deployment import validate_connection
 from pixhawk import Pixhawk
+from serial_lock import udp_ownership
 
 
 @contextmanager
@@ -22,7 +23,8 @@ def fake_sdk(hitl=0, connected=True):
     drone.vehicle_type.return_value = 'MULTICOPTER'
     module.Mavsdk = Mock(return_value=sdk)
     module.Configuration = Mock()
-    module.ComponentType = SimpleNamespace(COMPANION_COMPUTER='COMPANION')
+    sdk.configuration_factory = module.Configuration.create_with_component_type
+    module.ComponentType = SimpleNamespace(COMPANION_COMPUTER='COMPANION', GROUND_STATION='GCS')
     module.Autopilot = SimpleNamespace(PX4='PX4')
     module.Vehicle = SimpleNamespace(MULTICOPTER='MULTICOPTER')
     modules = {'mavsdk': module}
@@ -38,19 +40,57 @@ def fake_sdk(hitl=0, connected=True):
 
 
 class TransportTests(unittest.TestCase):
-    def test_only_current_profiles_and_serial_connections_are_allowed(self):
+    def test_serial_profiles_and_loopback_hitl_connections(self):
         for profile in ('hardware', 'hitl'):
             self.assertEqual(validate_connection(profile, 'serial:///dev/ttyAMA0:921600'), '/dev/ttyAMA0')
         for profile, uri in [('sitl', 'udpin://127.0.0.1:14540'),
                              ('unknown', 'serial:///dev/ttyAMA0:921600'),
                              ('hardware', 'serial:///dev/ttyAMA0:0'),
-                             ('hitl', 'udpin://127.0.0.1:14540')]:
+                             ('hardware', 'udpin://127.0.0.1:14540'),
+                             ('hitl', 'udpin://0.0.0.0:14540'),
+                             ('hitl', 'udpin://192.168.0.1:14540'),
+                             ('hitl', 'udpin://127.0.0.1:0'),
+                             ('hitl', 'udpin://127.0.0.1:65536')]:
             with self.subTest(profile=profile, uri=uri), self.assertRaises(ValueError):
                 validate_connection(profile, uri)
+        self.assertEqual(validate_connection('hitl', 'udpin://127.0.0.1:14540'),
+                         'udpin://127.0.0.1:14540')
+
+    def test_pc_hitl_constructor_still_checks_sys_hitl_without_actuation(self):
+        with fake_sdk(hitl=1) as (sdk, plugins):
+            fc = Pixhawk('udpin://127.0.0.1:14540', 'hitl')
+        self.assertEqual(fc.hitl, 1)
+        sdk.add_any_connection.assert_called_once_with('udpin://127.0.0.1:14540')
+        sdk.configuration_factory.assert_called_once_with('GCS')
+        plugins['action'].return_value.arm.assert_not_called()
+        plugins['param'].return_value.set_param_int.assert_not_called()
+
+    def test_pc_hitl_rejects_hardware_board_and_releases_sdk(self):
+        with fake_sdk(hitl=0) as (sdk, plugins):
+            with self.assertRaisesRegex(RuntimeError, 'does not match'):
+                Pixhawk('udpin://127.0.0.1:14540', 'hitl')
+        sdk.destroy.assert_called_once()
+        plugins['action'].return_value.arm.assert_not_called()
+
+    def test_hardware_udp_is_rejected_before_opening_sdk(self):
+        with fake_sdk() as (sdk, plugins):
+            with self.assertRaises(ValueError):
+                Pixhawk('udpin://127.0.0.1:14540', 'hardware')
+        sdk.add_any_connection.assert_not_called()
+
+    def test_two_consoles_cannot_own_same_udp_endpoint(self):
+        endpoint = 'udpin://127.0.0.1:14540'
+        with udp_ownership(endpoint):
+            with self.assertRaisesRegex(RuntimeError, 'Another controller'):
+                with udp_ownership(endpoint):
+                    self.fail('Second controller acquired the port lock')
+        with udp_ownership(endpoint):
+            pass
 
     def test_constructor_only_reads_and_subscribes_without_mission_or_arm(self):
         with fake_sdk() as (sdk, plugins):
             fc = Pixhawk('serial:///dev/fake:921600', 'hardware')
+        sdk.configuration_factory.assert_called_once_with('COMPANION')
         self.assertEqual(fc.profile, 'hardware')
         self.assertEqual(fc.phase, 'IDLE')
         plugins['action'].return_value.arm.assert_not_called()

@@ -6,6 +6,10 @@ kèm **waypoint acceptance + dwell** để giám sát đích. PX4 vẫn chạy m
 trạng thái từ telemetry, không tạo PID hoặc setpoint vận tốc.
 
 Code nằm trong `controller/pi/`; test Pi ở `controller/tests/`.
+Console cũng chạy trên PC trong HITL với `udpin://127.0.0.1:14540`, dùng
+bridge Gazebo giữ USB. Cùng FSM và điều kiện `SYS_HITL=1` được giữ;
+profile hardware vẫn yêu cầu serial. Dừng observer trước khi console
+chiếm UDP 14540. Xem lệnh đầy đủ trong README.
 `pixhawk.py` chỉ giữ kết nối/telemetry; mọi lệnh bay đi qua FSM trong
 `offboard_control.py`. `validation.py` kiểm tra giá trị số dùng chung.
 README gốc mô tả kiến trúc và lệnh nhanh; tài liệu này giữ bảng điều kiện,

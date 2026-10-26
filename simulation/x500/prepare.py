@@ -9,6 +9,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import xml.etree.ElementTree as E
+from paths import default_px4
 
 HERE = Path(__file__).resolve().parent
 
@@ -179,7 +180,7 @@ def prepare(px4, serial, baud, output):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--px4', type=Path, default=Path.home() / 'PX4-Autopilot-v1.16')
+    parser.add_argument('--px4', type=Path, default=default_px4())
     parser.add_argument('--serial', default='/dev/serial/by-id/usb-Auterion_PX4_FMU_v6C.x_0-if00')
     parser.add_argument('--baud', type=int, default=921600)
     parser.add_argument('--output', type=Path, default=HERE / 'generated')

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Type flight commands directly on Pi; local NED targets go to Pixhawk over UART."""
+"""Console for Pi serial control or local PC HITL via the simulator's UDP bridge."""
 import argparse
 import faulthandler
 from contextlib import ExitStack
@@ -13,7 +13,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from deployment import validate_connection
-from serial_lock import serial_ownership
+from serial_lock import serial_ownership, udp_ownership
 from offboard_control import OffboardControl
 from flight_policy import FlightPolicy
 
@@ -30,7 +30,7 @@ exit        End signal stream; does NOT send LAND
 X/Y origin: PX4 estimator local origin. Nonzero x/y/z alone does not diagnose a GPS fault.
 Z target: launch down_m minus --height; height stays fixed for this flight.
 Targets stay locked during TAKEOFF, FLY, SETTLING and HOLD_REQUESTED.
-At target: position/yaw dwell supervision on Pi, then native PX4 HOLD.
+At target: position/yaw dwell supervision by console, then native PX4 HOLD.
 HOLD is indefinite. Raw coordinates stay locked until FLY is explicitly selected.
 '''
 
@@ -129,7 +129,7 @@ def main():
     parser.add_argument('--yaw-tolerance', type=float, default=10.0, help='Arrival yaw tolerance, degrees')
     parser.add_argument('--settle-time', type=float, default=2.0, help='Fresh in-tolerance dwell before HOLD, seconds')
     parser.add_argument('--target-timeout', type=float, default=60.0, help='Target deadline before HOLD, seconds')
-    parser.add_argument('--log-dir', default='session-logs', help='Pi diagnostic log directory')
+    parser.add_argument('--log-dir', default='session-logs', help='Controller diagnostic log directory')
     parser.add_argument('--enable-actuation', action='store_true')
     parser.add_argument('--check', action='store_true', help='Read state, never send flight commands')
     args = parser.parse_args()
@@ -160,15 +160,16 @@ def main():
     for label, path in [('boot_id', '/proc/sys/kernel/random/boot_id'),
                         ('uptime', '/proc/uptime')]:
         try:
-            logger.info('Pi %s=%s', label, Path(path).read_text().strip())
+            logger.info('Host %s=%s', label, Path(path).read_text().strip())
         except OSError:
-            logger.warning('Cannot read Pi %s', label, exc_info=True)
+            logger.warning('Cannot read host %s', label, exc_info=True)
     print(f'Diagnostic log: {log_path}')
     with ExitStack() as stack:
         fault_log = stack.enter_context(open(log_path.with_suffix('.fault.log'), 'a'))
         faulthandler.enable(file=fault_log, all_threads=True)
         stack.callback(faulthandler.disable)
-        stack.enter_context(serial_ownership(device))
+        ownership = udp_ownership if device.startswith('udpin://') else serial_ownership
+        stack.enter_context(ownership(device))
         fc = OffboardControl(args.connection, args.profile,
                              args.enable_actuation and not args.check, args.system_id, args.height,
                              policy=policy)
@@ -177,12 +178,12 @@ def main():
             wait_initial_status(fc)
             execute(fc, 'status')
             return 0
-        print(f'Pi -> Pixhawk: {args.connection}; climb above launch={args.height:g} m')
+        print(f'Console -> Pixhawk: {args.connection}; climb above launch={args.height:g} m')
         print(HELP)
         last_status_log = 0.0
         while True:
             try:
-                print('Pi-UAV> ', end='', flush=True)
+                print('UAV> ', end='', flush=True)
                 # Keep watching takeover/landing while the user is not typing.
                 # Setpoint transmission itself remains inside MAVSDK.
                 while not select.select([sys.stdin], [], [], 0.2)[0]:

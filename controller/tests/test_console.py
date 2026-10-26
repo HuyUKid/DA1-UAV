@@ -46,6 +46,22 @@ class ConsoleTests(unittest.TestCase):
                 self.assertEqual(error.exception.code, 2)
                 factory.assert_not_called()
 
+    def test_pc_hitl_check_uses_udp_lock_without_enabling_actuation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fc = Mock()
+            fc.status.return_value = {'connected': True}
+            with patch('sys.argv', ['console.py', '--check', '--enable-actuation', '--profile', 'hitl',
+                                    '--connection', 'udpin://127.0.0.1:14540', '--log-dir', tmp]), \
+                    patch('console.udp_ownership') as ownership, patch('console.serial_ownership') as serial, \
+                    patch('console.wait_initial_status'), patch('console.OffboardControl', return_value=fc) as factory, \
+                    patch('console.logging.basicConfig'), patch('builtins.print'):
+                self.assertEqual(main(), 0)
+                ownership.assert_called_once_with('udpin://127.0.0.1:14540')
+                serial.assert_not_called()
+                self.assertIs(factory.call_args.args[2], False)
+                fc.arm.assert_not_called()
+                fc.close.assert_called_once()
+
 
 if __name__ == '__main__':
     unittest.main()

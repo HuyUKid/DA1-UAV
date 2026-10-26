@@ -16,7 +16,9 @@ from observe import ground_check
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--seconds', type=int, default=40)
-    parser.add_argument('--px4', type=Path, default=Path.home() / 'PX4-Autopilot-v1.16')
+    parser.add_argument('--px4', type=Path, help='Optional PX4 source build instead of bundled plugins')
+    parser.add_argument('--serial', default='auto')
+    parser.add_argument('--baud', type=int, default=921600)
     parser.add_argument('--system-id', type=int, default=1)
     parser.add_argument('--confirm-disarmed', action='store_true',
                         help='Operator confirms props removed, DISARM, and no ARM during this check')
@@ -32,8 +34,9 @@ def main():
     report = output / f'connection-{time.time_ns()}.json'
     data = {}
     with report.with_suffix('.log').open('w') as log:
+        source = ['--px4', str(args.px4)] if args.px4 is not None else []
         sim = subprocess.Popen([sys.executable, str(HERE / 'launch.py'), '--headless',
-                                '--px4', str(args.px4)],
+                                *source, '--serial', args.serial, '--baud', str(args.baud)],
                                stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
         try:
             # Observer can bind before Gazebo is fully loaded.

@@ -13,6 +13,8 @@ from pathlib import Path
 import shutil
 import subprocess
 import xml.etree.ElementTree as E
+from paths import plugin_directory
+from prebuilt import bundle_errors
 
 HERE = Path(__file__).resolve().parent
 
@@ -79,7 +81,7 @@ def model_errors(generated):
     return errors
 
 
-def inspect_setup(px4, generated=None, require_device=False, headless=False):
+def inspect_setup(px4=None, generated=None, require_device=False, headless=False, plugins=None):
     generated = generated or HERE / 'generated'
     static = model_errors(generated)
     runtime = []
@@ -91,11 +93,19 @@ def inspect_setup(px4, generated=None, require_device=False, headless=False):
         try:
             version = subprocess.run(['gzserver', '--version'], text=True,
                                      capture_output=True, timeout=5)
-            if version.returncode or 'version 11.' not in (version.stdout + version.stderr).lower():
+            banner = (version.stdout + version.stderr).lower()
+            # Classic Server::ParseArgs returns false after printing --version;
+            # gzserver consequently exits -1 (255), even on a valid install.
+            classic_banner = 'gazebo multi-robot simulator, version '
+            if version.returncode not in (0, 255) or (version.returncode and classic_banner not in banner):
+                runtime.append(f'Gazebo version check failed (exit {version.returncode}): '
+                               f'{(version.stderr or version.stdout).strip()}')
+            elif classic_banner + '11.' not in banner:
                 runtime.append('Gazebo Classic 11 is required; modern Gazebo plugins are incompatible')
         except (OSError, subprocess.TimeoutExpired) as exc:
             runtime.append(f'Cannot check Gazebo version: {exc}')
-    plugins = px4 / 'build/px4_sitl_default/build_gazebo-classic'
+    plugins = plugin_directory(px4, plugins)
+    runtime.extend(bundle_errors(plugins))
     device = None
     try:
         model = E.parse(generated / 'models/x500_hitl/model.sdf')
@@ -118,18 +128,20 @@ def inspect_setup(px4, generated=None, require_device=False, headless=False):
             'runtime_ok': not runtime, 'runtime_errors': runtime,
             'observer_dependencies_ok': importlib.util.find_spec('pymavlink') is not None,
             'serial_device': device, 'device_checked': require_device,
-            'flight_verified': False}
+            'plugin_directory': str(plugins), 'flight_verified': False}
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--px4', type=Path, default=Path.home() / 'PX4-Autopilot-v1.16')
+    source = parser.add_mutually_exclusive_group()
+    source.add_argument('--px4', type=Path, help='Use plugins from a PX4 source build')
+    source.add_argument('--plugins', type=Path, help='Use a specific plugin directory')
     parser.add_argument('--static', action='store_true')
     parser.add_argument('--require-device', action='store_true')
     args = parser.parse_args()
     if args.static and args.require_device:
         parser.error('--static and --require-device are mutually exclusive')
-    report = inspect_setup(args.px4, require_device=args.require_device)
+    report = inspect_setup(args.px4, require_device=args.require_device, plugins=args.plugins)
     print(json.dumps(report, indent=2))
     return 0 if report['static_ok'] and (args.static or report['runtime_ok']) else 1
 

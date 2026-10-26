@@ -21,3 +21,21 @@ def serial_ownership(device):
             yield
         finally:
             fcntl.flock(lock, fcntl.LOCK_UN)
+
+
+@contextmanager
+def udp_ownership(endpoint):
+    """Prevent two cooperating consoles from taking the same local HIL port.
+
+    Unrelated observers do not share this lock; use one consumer on UDP 14540.
+    """
+    key = hashlib.sha256(endpoint.encode()).hexdigest()[:24]
+    with open(f'/tmp/uav-udp-{key}.lock', 'a') as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise RuntimeError(f'Another controller owns UDP endpoint: {endpoint}') from None
+        try:
+            yield
+        finally:
+            fcntl.flock(lock, fcntl.LOCK_UN)

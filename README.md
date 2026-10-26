@@ -1,4 +1,4 @@
-# Đồ án 1 — điều khiển UAV bằng Raspberry Pi và Pixhawk
+# UAV — điều khiển bằng Raspberry Pi và Pixhawk
 
 Repository công khai: [HuyUKid/DA1-UAV](https://github.com/HuyUKid/DA1-UAV).
 
@@ -39,11 +39,14 @@ UAV/                              Gốc workspace/repository, không có uav/ l�
 │   ├── pi/                       Console, FSM, MAVSDK, policy, validation, UART
 │   ├── tests/                    Chỉ unit test Pi
 │   ├── tools/                    Chẩn đoán Pi, build MAVSDK, phân tích ULog
-│   └── params/hardware.params    Cấu hình giao tiếp cho UAV thật
+│   └── params/hardware.params    Overlay ứng viên UAV thật, giới hạn bay chậm
 ├── simulation/                   Toàn bộ phần mô phỏng, có thể chép sang PC khác
 │   ├── x500/                     Model/world và công cụ Gazebo Classic
 │   ├── tests/                    Test model và smoke test HITL
-│   ├── params/x500_hitl.params    Cấu hình HITL/giao tiếp, không có tuning bay cũ
+│   ├── params/x500_hitl.params    HITL X500 và giới hạn bay chậm đã thử
+│   ├── setup_classic.sh          Cài Classic 11, tải PX4 đã ghim và build plugin
+│   ├── install_classic.sh        Cài dependency, dùng plugin có sẵn, không build
+│   ├── prebuilt/                Plugin Classic cho Ubuntu 22.04 x86_64
 │   ├── requirements.txt
 │   └── docs/SETUP.md             Hướng dẫn cài và chạy trên PC mô phỏng
 ├── docs/                         Trạng thái bay và sơ đồ
@@ -55,14 +58,96 @@ trong `logs/2026-10-24/` được đưa lên repository cùng báo cáo và
 `analysis.json` để có thể tái phân tích trên máy khác. Các ULog phát sinh
 ngoài thư mục này vẫn được bỏ qua mặc định.
 
+## Cài mô phỏng trên PC sau khi clone
+
+Trên **Ubuntu 22.04 x86_64**, tải dự án vào thư mục tên `UAV` rồi chạy:
+
+```bash
+git clone https://github.com/HuyUKid/DA1-UAV.git UAV
+cd UAV
+bash simulation/install_classic.sh
+```
+
+Bộ cài cần Internet và quyền `sudo` để cài Gazebo Classic 11 cùng runtime.
+Nó tạo `simulation/.venv`, cài thư viện Python bằng wheel và kiểm tra
+plugin/SDF. **Không tải source PX4, không chạy compiler và không build plugin.**
+Git đã chứa model X500, mesh, world, công cụ chạy và 12 thư viện Classic
+đã build (khoảng 3,3 MB) trong `simulation/prebuilt/ubuntu-22.04-x86_64/`.
+Gazebo, QGroundControl, venv và firmware Pixhawk không được đóng gói vào Git.
+QGroundControl tải riêng; firmware và tham số HITL cấu hình trên Pixhawk.
+Không cần ROS 2 cho luồng này.
+
+Nếu máy đã có Gazebo Classic 11 và Python venv, bỏ qua cài apt:
+
+```bash
+bash simulation/install_classic.sh --skip-system
+```
+
+Sau khi cấu hình Pixhawk HITL, nối USB và chuẩn bị Pi theo
+[SETUP](simulation/docs/SETUP.md), mở simulator bằng:
+
+```bash
+simulation/.venv/bin/python simulation/x500/launch.py --serial auto
+```
+
+`auto` chỉ chọn khi có đúng một USB serial trong `/dev/serial/by-id/`;
+có nhiều thiết bị thì truyền `--serial /dev/serial/by-id/THIET_BI`.
+Launcher sửa cổng/baud trong bản model tạm, giữ nguyên model nguồn trong Git.
+Bộ cài không tự flash firmware, cấu hình Pixhawk hoặc khởi chạy HITL.
+HITL cần Pixhawk thật. Console có thể chạy trên Pi qua TELEM2 hoặc ngay
+trên PC qua UDP loopback của Gazebo như bên dưới.
+[PX4 Classic](https://docs.px4.io/v1.16/en/sim_gazebo_classic/).
+
+Bộ binary dành riêng cho Ubuntu 22.04 x86_64/Classic 11. Với hệ điều hành
+hoặc kiến trúc khác, dùng môi trường tương thích hoặc tự build và chỉ định
+`--px4 PATH`. `simulation/setup_classic.sh` giữ lại quy trình tải/build
+source trên Ubuntu 22.04 cho người bảo trì; không cần chạy khi dùng bộ
+binary có sẵn. [Chi tiết bộ binary](simulation/prebuilt/ubuntu-22.04-x86_64/README.md).
+
+## Kiểm tra bằng terminal ngay trên PC
+
+Khi Gazebo đã nối USB Pixhawk ở HITL, không để console mở cùng USB.
+Từ gốc dự án đầy đủ (có cả `controller/` và `simulation/`), cài MAVSDK trên PC:
+
+```bash
+simulation/.venv/bin/python -m pip install --only-binary=:all: -r controller/pi/requirements.txt
+simulation/.venv/bin/python controller/pi/console.py --profile hitl \
+  --connection udpin://127.0.0.1:14540 --check
+```
+
+Console dùng cùng FSM như trên Pi; chỉ đường truyền thay đổi:
+
+```text
+PC console ↔ UDP 127.0.0.1:14540 ↔ Gazebo Classic ↔ USB ↔ Pixhawk HITL
+```
+
+Chỉ một console/observer dùng UDP 14540; đóng observer trước khi mở console.
+Không cần Pi cho cách kiểm tra này. Profile `hitl` vẫn kiểm tra `SYS_HITL=1`;
+profile `hardware` tiếp tục yêu cầu serial, không nhận kết nối UDP.
+Đã chạy bài bay HITL ngày 26/10: TAKEOFF/HOLD/FLY/LAND, LAND ưu tiên và mất luồng Offboard; xem [số đo và giới hạn](simulation/docs/ALGORITHM_VALIDATION_2026-10-26.md). Sau khi import file HITL, reboot, kiểm tra `SYS_HITL=1`, IDLE, DISARM, ON_GROUND, dữ liệu mới và preflight đạt:
+
+```bash
+simulation/.venv/bin/python controller/pi/console.py --profile hitl \
+  --connection udpin://127.0.0.1:14540 --height 2 --enable-actuation
+```
+
+Nhập `status`, `takeoff`; chờ HOLD và `takeoff_complete=true`, rồi
+`fly 1 2`; chờ HOLD, sau đó `land`. Chờ DISARM/ON_GROUND trước `exit` hoặc
+đóng Gazebo. Không dùng `disarm` thay LAND vì lệnh đó force-stop motor.
+
 ## Cài code trên Pi
+
+Nếu dùng một máy khác để SSH vào Pi và nhập lệnh trong console Pi qua TELEM2,
+xem [quy trình HITL qua Pi](controller/docs/PI_HITL_REMOTE.md). Gói chuyển
+nhanh cục bộ nằm ở `dist/uav-pi-hitl-20261026.tar.gz` (bị Git ignore);
+chạy console trên Pi không cần UDP API từ máy điều khiển.
 
 Từ gốc dự án trên PC, thay địa chỉ SSH bằng địa chỉ Pi thực tế:
 
 ```bash
-ssh pi@192.168.50.1 'mkdir -p ~/uav/controller'
+ssh pi@<PI_IP> 'mkdir -p ~/uav/controller'
 rsync -av --exclude='.venv/' --exclude='__pycache__/' \
-  --exclude='session-logs/' controller/ pi@192.168.50.1:~/uav/controller/
+  --exclude='session-logs/' controller/ pi@<PI_IP>:~/uav/controller/
 ```
 
 Trên Pi:
@@ -116,8 +201,8 @@ USB ở dưới dùng khi router không giữ cổng đó. Nếu router đang gi
 phục vụ QGC qua UDP, không chạy thêm console mở cùng USB: cần cấu hình
 router cấp một cổng serial ảo riêng cho console, hoặc bổ sung hỗ trợ
 console kết nối router qua UDP. Repository hiện chưa triển khai hai cách
-chia sẻ này; không thay `--connection` bằng URI UDP vì validator hiện chỉ
-nhận serial. Đường QGC qua UDP và console qua USB chưa được kiểm chứng
+chia sẻ này cho profile `hardware`, vốn chỉ nhận serial. UDP loopback chỉ
+được hỗ trợ cho HITL trên PC ở mục trên. Đường QGC qua UDP và console qua USB chưa được kiểm chứng
 chạy đồng thời trong cấu hình này.
 
 ### Profile và phạm vi file tham số
@@ -127,7 +212,7 @@ chạy đồng thời trong cấu hình này.
 | UAV thật, Pi nối USB | `hardware` | 0 | `controller/params/hardware.params`: có `SYS_HITL=0`, phần giao tiếp còn lại dành cho TELEM2, không phải USB |
 | Gazebo HITL, Pixhawk thật | `hitl` | 1 | `simulation/params/x500_hitl.params` |
 
-Hai file là overlay tối thiểu, không phải bản cấu hình đầy đủ của UAV.
+Hai file là overlay tham số một phần, không phải bản cấu hình đầy đủ của UAV. Kết quả bay và lý do chọn giá trị nằm ở [báo cáo HITL 26/10](simulation/docs/ALGORITHM_VALIDATION_2026-10-26.md).
 Không import toàn bộ `hardware.params` với mục đích cấu hình USB: các
 dòng MAVLink instance 1/TELEM2 trong file không cấu hình đường USB đang
 dùng. Kiểm tra MAVLink USB trên firmware thực tế của Pixhawk trong QGC;
@@ -136,13 +221,8 @@ Với TX/RX/GND, `MAV_1_FLOW_CTRL=0` tắt RTS/CTS; `2` là auto-detect.
 Sao lưu tham số, đối chiếu firmware/cổng/wiring trong QGC trước khi import
 và reboot sau thay cấu hình serial/HITL. [Tham chiếu PX4](https://docs.px4.io/v1.17/en/advanced_config/parameter_reference#MAV_1_FLOW_CTRL).
 
-Các giá trị tuning cũ chưa có log xác thực tương ứng nên đã loại khỏi
-file nạp; các dòng failsafe cũng được bỏ để cấu hình riêng trong QGC.
-Cấu hình airframe, actuator, calibration, RC, pin và failsafe trên chính
-thiết bị trong QGC; cần kiểm chứng tham số bay lại bằng log mới.
-`hardware.params` không phục hồi airframe/output sau HITL: khi quay về bay
-thật phải khôi phục và kiểm tra bộ cấu hình UAV thật đã sao lưu. Bỏ dòng
-khỏi file overlay không xóa giá trị đã được nạp trước đó trên Pixhawk.
+Bộ HITL hiện dùng giới hạn XY 0,5 m/s, takeoff 0,4 m/s, LAND 0,3 m/s và hover 0,74 trên model X500. Bộ `hardware.params` chỉ chuyển các giới hạn chuyển động chậm thành **ứng viên** cho UAV thật; không chuyển hover/PID hoặc breaker HITL. File thật đặt `SYS_HITL=0`, airframe generic Quad-X 4001, clear HIL output, bật lại safety checks và đặt 6S. Khi quay về bay thật phải khôi phục/kiểm tra output, calibration, RC, battery scaling, failsafe trên chính UAV trong QGC rồi thử nghiệm từng bước. Chưa nạp hoặc kiểm chứng file thật trên thiết bị.
+Bỏ dòng khỏi file overlay không xóa giá trị đã được nạp trước đó trên Pixhawk.
 [Đánh giá hai file cũ](logs/2026-10-24/BAO_CAO_2026-10-24.md#12-rà-soát-hai-file-tham-số-được-bổ-sung).
 
 ## Chạy console
@@ -207,7 +287,7 @@ python3 -B -m unittest discover -s simulation/tests -p 'test_*.py'
 python3 simulation/x500/check_setup.py --static
 ```
 
-Hiện có 71 test Pi và 19 test model/công cụ mô phỏng. Các bài này không
+Các test Pi và model/công cụ mô phỏng không
 mở UART, không gửi lệnh motor và không cần cài Gazebo. Smoke test HITL là
 bài riêng trong hướng dẫn mô phỏng, không chạy qua unittest discover.
 

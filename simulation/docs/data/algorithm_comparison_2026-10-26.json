@@ -1,0 +1,222 @@
+[
+  {
+    "case": "baseline",
+    "report": "baseline-1793002653323326001/report.json",
+    "report_sha256": "34efb95055095b102e19ab31c4555bddf0b888e72f160a0e72ee0f2bde8f2e05",
+    "tested_parameters": {
+      "MPC_XY_VEL_MAX": 12.0,
+      "MPC_XY_CRUISE": 5.0,
+      "MPC_Z_VEL_MAX_UP": 3.0,
+      "MPC_Z_VEL_MAX_DN": 1.5,
+      "MPC_TKO_SPEED": 1.5,
+      "MPC_LAND_SPEED": 0.699999988079071,
+      "MPC_ACC_HOR": 3.0,
+      "MPC_ACC_HOR_MAX": 5.0,
+      "MPC_ACC_UP_MAX": 4.0,
+      "MPC_ACC_DOWN_MAX": 3.0,
+      "MPC_JERK_MAX": 8.0,
+      "MPC_THR_HOVER": 0.5,
+      "MPC_USE_HTE": 1
+    },
+    "commands_rejected": 3,
+    "cycles": [
+      {
+        "cycle": 1,
+        "hold_truth_xy_rms_m": 0.06001942301905229,
+        "hold_truth_xy_p95_m": 0.0860273975211471,
+        "hold_truth_z_rms_m": 0.07308579592908769,
+        "hold_truth_abs_z_p95_m": 0.12631400000000018,
+        "hold_estimated_speed_p95_m_s": 0.03477920590479829,
+        "peak_estimated_horizontal_speed_m_s": 1.0202640874721682,
+        "peak_model_tilt_deg": 9.811680099599565,
+        "peak_true_height_m": 2.002796,
+        "pose_samples": 43,
+        "hold_displacements": [
+          {
+            "stage": "cycle1:fly_out_hold",
+            "xy_displacement_m": 0.049298542331391436,
+            "z_displacement_m": 0.005689999999999973
+          },
+          {
+            "stage": "cycle1:return_hold",
+            "xy_displacement_m": 0.022882071081962836,
+            "z_displacement_m": -0.0041400000000000325
+          },
+          {
+            "stage": "cycle1:takeoff_hold",
+            "xy_displacement_m": 0.019720976268937603,
+            "z_displacement_m": 0.010669999999999735
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "case": "limited",
+    "report": "limited-1793002844039763183/report.json",
+    "report_sha256": "4a98099577678468f08d76456d80bfaddf40c95c71b0f8d64638f49d8584eb21",
+    "tested_parameters": {
+      "MPC_XY_VEL_MAX": 0.5,
+      "MPC_XY_CRUISE": 0.5,
+      "MPC_Z_VEL_MAX_UP": 0.5,
+      "MPC_Z_VEL_MAX_DN": 0.5,
+      "MPC_TKO_SPEED": 0.5,
+      "MPC_LAND_SPEED": 0.30000001192092896,
+      "MPC_ACC_HOR": 2.0,
+      "MPC_ACC_HOR_MAX": 2.0,
+      "MPC_ACC_UP_MAX": 2.0,
+      "MPC_ACC_DOWN_MAX": 2.0,
+      "MPC_JERK_MAX": 2.0,
+      "MPC_THR_HOVER": 0.5,
+      "MPC_USE_HTE": 1
+    },
+    "commands_rejected": 6,
+    "cycles": [
+      {
+        "cycle": 1,
+        "hold_truth_xy_rms_m": 0.05799460427060572,
+        "hold_truth_xy_p95_m": 0.10993394329623121,
+        "hold_truth_z_rms_m": 0.014026602037053776,
+        "hold_truth_abs_z_p95_m": 0.02631199999999989,
+        "hold_estimated_speed_p95_m_s": 0.0313702581740662,
+        "peak_estimated_horizontal_speed_m_s": 0.5267822779907743,
+        "peak_model_tilt_deg": 11.972702172941583,
+        "peak_true_height_m": 2.0081700000000002,
+        "pose_samples": 59,
+        "hold_displacements": [
+          {
+            "stage": "cycle1:fly_out_hold",
+            "xy_displacement_m": 0.03835317865575159,
+            "z_displacement_m": -0.0007700000000001594
+          },
+          {
+            "stage": "cycle1:return_hold",
+            "xy_displacement_m": 0.03608908291990807,
+            "z_displacement_m": 0.00951000000000013
+          },
+          {
+            "stage": "cycle1:takeoff_hold",
+            "xy_displacement_m": 0.030821170597496773,
+            "z_displacement_m": -0.01695000000000002
+          }
+        ]
+      },
+      {
+        "cycle": 2,
+        "hold_truth_xy_rms_m": 0.05737411880752782,
+        "hold_truth_xy_p95_m": 0.08992052731734122,
+        "hold_truth_z_rms_m": 0.010356013632327,
+        "hold_truth_abs_z_p95_m": 0.01699799999999998,
+        "hold_estimated_speed_p95_m_s": 0.03774776021525122,
+        "peak_estimated_horizontal_speed_m_s": 0.5297363877109913,
+        "peak_model_tilt_deg": 4.538224377376839,
+        "peak_true_height_m": 2.019326,
+        "pose_samples": 60,
+        "hold_displacements": [
+          {
+            "stage": "cycle2:fly_out_hold",
+            "xy_displacement_m": 0.010881780460935523,
+            "z_displacement_m": 0.005970000000000031
+          },
+          {
+            "stage": "cycle2:return_hold",
+            "xy_displacement_m": 0.00891982539066768,
+            "z_displacement_m": 0.006510000000000016
+          },
+          {
+            "stage": "cycle2:takeoff_hold",
+            "xy_displacement_m": 0.03471833442145518,
+            "z_displacement_m": -0.007899999999999796
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "case": "reference",
+    "report": "reference-1793004012104917680/report.json",
+    "report_sha256": "7017488fa922321befafb3da8cb303fe5d08929f419c1ab65f9abbf0ee47a98e",
+    "tested_parameters": {
+      "MPC_XY_VEL_MAX": 0.5,
+      "MPC_XY_CRUISE": 0.5,
+      "MPC_Z_VEL_MAX_UP": 0.5,
+      "MPC_Z_VEL_MAX_DN": 0.5,
+      "MPC_TKO_SPEED": 0.4000000059604645,
+      "MPC_LAND_SPEED": 0.30000001192092896,
+      "MPC_ACC_HOR": 2.0,
+      "MPC_ACC_HOR_MAX": 2.0,
+      "MPC_ACC_UP_MAX": 2.0,
+      "MPC_ACC_DOWN_MAX": 2.0,
+      "MPC_JERK_MAX": 2.0,
+      "MPC_THR_HOVER": 0.7400000095367432,
+      "MPC_USE_HTE": 1,
+      "MPC_TKO_RAMP_T": 1.0,
+      "COM_OF_LOSS_T": 0.5,
+      "COM_OBL_RC_ACT": 4
+    },
+    "commands_rejected": 6,
+    "cycles": [
+      {
+        "cycle": 1,
+        "hold_truth_xy_rms_m": 0.05483841955656275,
+        "hold_truth_xy_p95_m": 0.07654337788126674,
+        "hold_truth_z_rms_m": 0.018494290851120747,
+        "hold_truth_abs_z_p95_m": 0.027985320712585637,
+        "hold_estimated_speed_p95_m_s": 0.028745747549700704,
+        "peak_estimated_horizontal_speed_m_s": 0.5305112601044599,
+        "peak_model_tilt_deg": 2.8952942518650406,
+        "peak_true_height_m": 2.0193194961440475,
+        "pose_samples": 484,
+        "hold_displacements": [
+          {
+            "stage": "cycle1:fly_out_hold",
+            "xy_displacement_m": 0.02401728205343861,
+            "z_displacement_m": 0.0030634337457438043
+          },
+          {
+            "stage": "cycle1:return_hold",
+            "xy_displacement_m": 0.003791176592363085,
+            "z_displacement_m": 0.0023708044054431276
+          },
+          {
+            "stage": "cycle1:takeoff_hold",
+            "xy_displacement_m": 0.058568206877598776,
+            "z_displacement_m": -0.007894481133409847
+          }
+        ]
+      },
+      {
+        "cycle": 2,
+        "hold_truth_xy_rms_m": null,
+        "hold_truth_xy_p95_m": null,
+        "hold_truth_z_rms_m": null,
+        "hold_truth_abs_z_p95_m": null,
+        "hold_estimated_speed_p95_m_s": null,
+        "peak_estimated_horizontal_speed_m_s": 0.18649034089209704,
+        "peak_model_tilt_deg": 1.9500516362210019,
+        "peak_true_height_m": 0.37605740562283896,
+        "pose_samples": 120,
+        "hold_displacements": []
+      },
+      {
+        "cycle": 3,
+        "hold_truth_xy_rms_m": 0.05685833621378901,
+        "hold_truth_xy_p95_m": 0.07069702030794225,
+        "hold_truth_z_rms_m": 0.03387785968178819,
+        "hold_truth_abs_z_p95_m": 0.036985704300271795,
+        "hold_estimated_speed_p95_m_s": 0.026633678127596587,
+        "peak_estimated_horizontal_speed_m_s": 0.5156908633123383,
+        "peak_model_tilt_deg": 4.610527619179754,
+        "peak_true_height_m": 1.996408676145878,
+        "pose_samples": 279,
+        "hold_displacements": [
+          {
+            "stage": "cycle3:takeoff_hold",
+            "xy_displacement_m": 0.049556867552082835,
+            "z_displacement_m": 0.0004979001194898025
+          }
+        ]
+      }
+    ]
+  }
+]

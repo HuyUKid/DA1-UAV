@@ -57,10 +57,29 @@ Phần `simulation/` phải có thể chép sang PC khác mà không cần code 
 
 ## Tham số, model và thiết bị
 
+- Kiểm tra console trên PC dùng profile `hitl` với
+  `udpin://127.0.0.1:14540`, qua bridge của Gazebo giữ USB. Hardware vẫn
+  chỉ dùng serial. Không chạy console và observer cùng chiếm UDP 14540.
+- Trước reset/nạp tham số, bản sao phải được xác minh giá trị và kiểu,
+  không chỉ đếm đủ PARAM_VALUE. Với frame MAVLink 2, không giả định
+  `get_payload()` của parser v1 bỏ đúng header; kiểm tra bytes từ frame
+  đầy đủ theo magic/header và đối chiếu tham số mẫu trước khi thay đổi bo.
+
+- Luồng cài mặc định cho PC là `simulation/install_classic.sh`: dùng plugin
+  đã build tại `simulation/prebuilt/ubuntu-22.04-x86_64/`, không clone/build
+  PX4. Bộ binary chỉ dành cho Ubuntu 22.04 x86_64/Classic 11; cài Gazebo và
+  Python dependency riêng. `setup_classic.sh` là lựa chọn build từ source
+  cho người bảo trì, không phải bước bắt buộc cho người dùng bộ binary.
+- Khi thay binary, dùng `simulation/tools/package_classic.py`, giữ license,
+  manifest/checksum và mô tả đúng nguồn build. Kiểm tra bằng `prebuilt.py`,
+  test và SDF trên bản simulation chép riêng. Không ghi runtime/HIL đã đạt
+  khi mới kiểm tra loader hoặc file; không chép venv/cache/build đầy đủ lên Git.
+
 - `hardware` dùng SYS_HITL=0; `hitl` dùng SYS_HITL=1. Không đổi tham số
   trên bo chỉ để vượt kiểm tra profile.
-- Hai file `.params` hiện là overlay tối thiểu, không phải cấu hình UAV
-  đầy đủ. Bỏ một dòng khỏi overlay không phục hồi giá trị trên Pixhawk.
+- Hai file `.params` là overlay một phần, không phải cấu hình UAV đầy đủ.
+  File HITL có tốc độ/hover của model đã bay thử; file thật chỉ có giới hạn
+  chuyển động chậm dạng ứng viên và phục hồi kiểm tra an toàn khỏi HITL. Bỏ một dòng khỏi overlay không phục hồi giá trị trên Pixhawk.
 - Giữ tuning mô phỏng tách khỏi UAV thật. Không thêm giá trị PID/hover/
   failsafe chưa được xác thực chỉ để làm hết cảnh báo hoặc giúp ARM thành công.
 - X500 hiện là bản port từ `gz_x500` sang Classic. Tham khảo provenance và

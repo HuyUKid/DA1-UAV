@@ -3,6 +3,7 @@ import logging
 import math
 import threading
 import time
+from deployment import validate_connection
 
 
 def json_safe(value):
@@ -28,8 +29,7 @@ def has_nonfinite(value):
 
 class Pixhawk:
     def __init__(self, connection, profile, enabled=False, system_id=1):
-        if profile not in {'hardware', 'hitl'}:
-            raise ValueError('Expected hardware or hitl profile')
+        validate_connection(profile, connection)
         from mavsdk import Mavsdk, Configuration, ComponentType, Autopilot, Vehicle
         from mavsdk.plugins.action import Action
         from mavsdk.plugins.telemetry import Telemetry
@@ -40,7 +40,11 @@ class Pixhawk:
         self.phase = 'IDLE'
         self.takeoff_complete = False
         self.operation_at = 0.0
-        self.sdk = Mavsdk(Configuration.create_with_component_type(ComponentType.COMPANION_COMPUTER))
+        # A console running on the PC is the GCS; serial Pi control is a companion.
+        component = (ComponentType.GROUND_STATION
+                     if profile == 'hitl' and connection.startswith('udpin://')
+                     else ComponentType.COMPANION_COMPUTER)
+        self.sdk = Mavsdk(Configuration.create_with_component_type(component))
         try:
             self.sdk.add_any_connection(connection)
             self.drone = self.sdk.first_autopilot(10.0)

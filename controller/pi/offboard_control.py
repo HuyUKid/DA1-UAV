@@ -210,7 +210,7 @@ class OffboardControl(Pixhawk):
         result = super().status()
         result['can_send_target'] = self.ready_for_fly()
         result['target_reached'] = self.target_reached
-        result['completion_source'] = 'Pi arrival supervision of PX4 telemetry; not a PX4 waypoint ACK'
+        result['completion_source'] = 'Controller arrival supervision of PX4 telemetry; not a PX4 waypoint ACK'
         result['flight_policy'] = asdict(self.policy)
         result['px4_hold_min_altitude_m'] = self.nav_min_ltr_alt
         result['active_operation'] = self.motion_kind

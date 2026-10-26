@@ -17,10 +17,17 @@ pkill -TERM -x gzserver 2>/dev/null || true
 pkill -TERM -x gzclient 2>/dev/null || true
 pkill -TERM -f '[s]imulation/x500/launch.py' 2>/dev/null || true
 
-if pgrep -x gzserver >/dev/null || pgrep -x gzclient >/dev/null; then
+# TERM is asynchronous; allow clients to exit before taking one final snapshot.
+for _ in {1..30}; do
+    if ! pgrep -x gzserver >/dev/null && ! pgrep -x gzclient >/dev/null; then
+        break
+    fi
+    sleep 0.1
+done
+remaining=$(pgrep -a -x gzserver; pgrep -a -x gzclient) || true
+if [[ -n "$remaining" ]]; then
     echo 'A Gazebo process is still running:' >&2
-    pgrep -a -x gzserver >&2 || true
-    pgrep -a -x gzclient >&2 || true
+    echo "$remaining" >&2
     exit 1
 fi
 

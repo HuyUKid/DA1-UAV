@@ -1,0 +1,94 @@
+{
+  "format": 1,
+  "packaged_at_utc": "2026-10-26T07:05:09.902857+00:00",
+  "target": {
+    "id": "ubuntu",
+    "version_id": "22.04",
+    "machine": "x86_64",
+    "gazebo_major": 11
+  },
+  "gazebo_package_version": "11.10.2+dfsg-1",
+  "compiler_comment": "String dump of section '.comment':\n  [     0]  GCC: (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0",
+  "px4_revision": "6ea3539157ca358c70a515878b77077af7d4611d",
+  "classic_revision": "70683dc759cbd3ebccfa78429b564f8b1fb5d149",
+  "classic_worktree_status": "M .gitignore\n M models/iris_hitl/iris_hitl.sdf\n?? models/iris_hitl/iris_hitl.sdf.backup",
+  "classic_tracked_diff_sha256": "c44fd233689af35c9a4dd385d1a70079f21fbb5ff8f215c710251b33543ef547",
+  "provenance_limit": "Packaged from an existing local build; checkout metadata was recorded at packaging time, not at original compilation.",
+  "transformations": [
+    "CMake RPATH_CHANGE to $ORIGIN on copies",
+    "strip --strip-unneeded on copies"
+  ],
+  "model_plugins": [
+    "libgazebo_barometer_plugin.so",
+    "libgazebo_gps_plugin.so",
+    "libgazebo_groundtruth_plugin.so",
+    "libgazebo_imu_plugin.so",
+    "libgazebo_magnetometer_plugin.so",
+    "libgazebo_mavlink_interface.so",
+    "libgazebo_motor_model.so",
+    "libgazebo_multirotor_base_plugin.so"
+  ],
+  "libraries": {
+    "libgazebo_barometer_plugin.so": {
+      "sha256": "b8195421c423b6fcd437d50bfc7d0ccaf7143a30a76407987374a8db4c20650b",
+      "bytes": 308728,
+      "original_sha256": "7bae3cdba39d094e1516390b4c739e2ba57069742c6ae36be370ab3b54225c68"
+    },
+    "libgazebo_gps_plugin.so": {
+      "sha256": "2f11c452c00d2008757508fc0285e607aa824bea0dd8e750907496fa1512b092",
+      "bytes": 349976,
+      "original_sha256": "eec3a6ff45ac6a00ed50c65df7be47d7a886e9dad30376ddc76a6a467a287726"
+    },
+    "libgazebo_groundtruth_plugin.so": {
+      "sha256": "bd5878f007160070eb53373c26205c590b4f00a716fd6f10e4d89797ea8cab1b",
+      "bytes": 300536,
+      "original_sha256": "fc13726f79b63580d1bdbb66aeb74b59097be2b1ae6ff6680f92df09883d8999"
+    },
+    "libgazebo_imu_plugin.so": {
+      "sha256": "9b46465c018dd8ea66914a3bc962c6d3c5bf8caa78da6e59651addb89c086bca",
+      "bytes": 316952,
+      "original_sha256": "a03252850ca1285d3577217b3a4d6d44d7080b7f0530f7bb8b012a2a0f5c2712"
+    },
+    "libgazebo_magnetometer_plugin.so": {
+      "sha256": "003b30c38d3c714cedeadb4941d0a0e9937ed3ac9a8cceec84748117c3cd040f",
+      "bytes": 345752,
+      "original_sha256": "0d0220e35bd75616b435da1b0c36a73e12f5bb776d59b208ed7eb45d105919be"
+    },
+    "libgazebo_mavlink_interface.so": {
+      "sha256": "5dd3671216f32aa0dbeaa1198425da0af534afe0c2f1dd67637951cc792ebc0a",
+      "bytes": 769912,
+      "original_sha256": "001e405ebd8ee466129cd05da9f1afdee45f8d30262d9dd426712cac0bbf6025"
+    },
+    "libgazebo_motor_model.so": {
+      "sha256": "c28a31b75e0c7b1a4a0fa2535c6ac02477681281e6ece50d34c6f341763ef9a4",
+      "bytes": 366232,
+      "original_sha256": "8018323c3b0cc51dfe525ddabfbb06f70a5355f481624c140cfa100716faa2e7"
+    },
+    "libgazebo_multirotor_base_plugin.so": {
+      "sha256": "2df87d577b8b4b9061ef157b743a57eb69554f78c791ffaea2f5c6c015b62915",
+      "bytes": 292216,
+      "original_sha256": "87ab05e02281953b2358917bf0b23e670bd5d043903646d9990e545aa7f37fd2"
+    },
+    "libmav_msgs.so": {
+      "sha256": "c9d93281c0f9666f975877286fafa09277ab1dff9c3babd3ae78e323339f9470",
+      "bytes": 35784,
+      "original_sha256": "a5b0a124d5b45860b6ff848b45fdebabc496239c756538f3dc4ced00c2d107a1"
+    },
+    "libnav_msgs.so": {
+      "sha256": "6cdb8a0676bfa56d573435d8fdc790ebfc4b83dddc86cd08f3c0cb0eff526543",
+      "bytes": 35776,
+      "original_sha256": "6c4f2d9103229f3b9dbf9e9e1508926b954e5b8e9c30e97390ba73011eb04dd9"
+    },
+    "libphysics_msgs.so": {
+      "sha256": "ac4dd40bad39c7ef6c81378d20cd91e56fdbe17565642e6aed2705fc17ef7ca7",
+      "bytes": 44176,
+      "original_sha256": "7811d78f13fed3e9900ef05bc7731092771f043dd050d154a700009e4169c3b8"
+    },
+    "libsensor_msgs.so": {
+      "sha256": "916b8799c718efbb3750626b371cb7ebc29ed642c81aed37082f5eab9cf4f2ab",
+      "bytes": 140616,
+      "original_sha256": "64d40650d82772cd247b9ab6c6a300055ae43fd1f2920d765e70a78ceb776476"
+    }
+  },
+  "validation_scope": "Checksums, relocated loader/dependency checks and SDF validation are separate checks; no HIL/flight claim."
+}

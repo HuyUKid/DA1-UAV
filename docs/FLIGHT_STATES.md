@@ -1,15 +1,23 @@
 # Luồng điều khiển local NED và cách kiểm chứng
 
+Trang này mô tả nhánh `fly x y` theo local NED. Nhánh GPS A→B mới dùng
+PX4 Mission với `gps-plan`/`gps-start` và lệnh chung `pause`/`resume`/`cancel`;
+xem [WEB_GPS_MISSION.md](../controller/docs/WEB_GPS_MISSION.md). Hai nhánh
+dùng chung TAKEOFF/HOLD ban đầu; sau GPS Cancel có thể nhận A/B mới ngay
+từ HOLD trên không. Không trộn kinh/vĩ độ với x/y mét.
+
 Kỹ thuật dùng ở đây là **finite-state machine (FSM)** cho tuần tự lệnh,
 kèm **waypoint acceptance + dwell** để giám sát đích. PX4 vẫn chạy mọi vòng
 điều khiển vị trí/vận tốc/attitude/rate. Pi chỉ kiểm tra điều kiện chuyển
 trạng thái từ telemetry, không tạo PID hoặc setpoint vận tốc.
 
 Code nằm trong `controller/pi/`; test Pi ở `controller/tests/`.
-Console cũng chạy trên PC trong HITL với `udpin://127.0.0.1:14540`, dùng
-bridge Gazebo giữ USB. Cùng FSM và điều kiện `SYS_HITL=1` được giữ;
-profile hardware vẫn yêu cầu serial. Dừng observer trước khi console
-chiếm UDP 14540. Xem lệnh đầy đủ trong README.
+Trong HITL, console cũng chạy trên PC với `udpin://127.0.0.1:14540` qua
+bridge Gazebo giữ USB; profile `hitl` kiểm tra `SYS_HITL=1`. Với UAV thật,
+console chạy trên Pi qua cùng URI loopback khi MAVLink Router giữ USB;
+profile `hardware` kiểm tra `SYS_HITL=0`. FSM giống nhau ở hai môi trường.
+Chỉ một console/observer chiếm UDP 14540 trên cùng máy. Xem lệnh đầy đủ
+trong README và hướng dẫn UAV thật ở `controller/docs/HARDWARE_SETUP.md`.
 `pixhawk.py` chỉ giữ kết nối/telemetry; mọi lệnh bay đi qua FSM trong
 `offboard_control.py`. `validation.py` kiểm tra giá trị số dùng chung.
 README gốc mô tả kiến trúc và lệnh nhanh; tài liệu này giữ bảng điều kiện,
@@ -31,14 +39,28 @@ stateDiagram-v2
     SETTLING --> TAKEOFF: ra ngoài ngưỡng của TAKEOFF
     SETTLING --> FLY: ra ngoài ngưỡng của FLY
     HOLD_REQUESTED --> HOLD: telemetry PX4 xác nhận HOLD
-    HOLD --> FLY_READY: fly
-    FLY_READY --> FLY: x y
     HOLD --> FLY: fly x y
+    FLY --> PAUSE_REQUESTED: pause
+    SETTLING --> PAUSE_REQUESTED: pause
+    PAUSE_REQUESTED --> PAUSED: PX4 xác nhận HOLD mới
+    PAUSED --> FLY: resume, đúng đích cũ
+    FLY --> CANCEL_REQUESTED: cancel
+    SETTLING --> CANCEL_REQUESTED: cancel
+    PAUSED --> CANCEL_REQUESTED: cancel
+    CANCEL_REQUESTED --> HOLD: HOLD tại vị trí/độ cao hiện tại
     TAKEOFF --> HOLD_REQUESTED: hết target-timeout
     FLY --> HOLD_REQUESTED: hết target-timeout
     TAKEOFF --> LANDING: land
     FLY --> LANDING: land
     HOLD --> LANDING: land
+    FLY --> CANCEL_REQUESTED: cancel trước return-home
+    HOLD --> HOME_HOLD_REQUESTED: return-home
+    GPS_CANCELLED --> HOME_HOLD_REQUESTED: return-home
+    GPS_COMPLETE --> HOME_HOLD_REQUESTED: return-home
+    GPS_COMPLETE --> FLY: return-height về độ cao TAKEOFF
+    HOME_HOLD_REQUESTED --> GPS_RUNNING: HOLD, thay Mission bằng waypoint cất cánh
+    GPS_RUNNING --> HOME_COMPLETE: Mission xong, Pi yêu cầu HOLD, GPS/cao độ đúng
+    HOME_COMPLETE --> LANDING: land riêng
     LANDING --> IDLE: ON_GROUND + armed=false mới
 ```
 
@@ -53,19 +75,27 @@ khi đang bận bị từ chối rõ ràng, không lén chạy sau đó.
 |---|---|
 | `arm` | IDLE, disarmed, ON_GROUND, preflight tốt; không phát Offboard |
 | `takeoff` | IDLE/disarmed hoặc ARMED trong phiên; lên `z_launch-height` |
-| `fly` | Chọn nhập tọa độ từ HOLD sau TAKEOFF hoàn tất; PX4 vẫn HOLD |
-| `x y` | Chỉ nhận ở FLY_READY, đơn vị mét Bắc/Đông tuyệt đối theo EKF |
-| `fly x y` | Lệnh tường minh rời HOLD để bay tới đích mới |
+| `fly x y` hoặc `fly x,y` | Lệnh tường minh rời HOLD để bay tới đích Bắc/Đông tuyệt đối theo EKF |
+| `pause` | Trong FLY/SETTLING: lưu đúng đích x/y/z, yêu cầu HOLD; chờ mode mới mới báo PAUSED |
+| `resume` | Chỉ từ PAUSED: gửi lại đúng đích đã lưu, prestream rồi OFFBOARD; không ARM lại |
+| `cancel` | Trong FLY/SETTLING/PAUSED: bỏ đích cũ và HOLD tại vị trí/độ cao hiện tại |
+| `return-home` | Sau TAKEOFF hoàn tất: về GPS điểm cất cánh ở độ cao hiện tại, rồi HOLD; không tự LAND |
+| `return-height` | Từ HOLD trên không: giữ x/y hiện tại, về độ cao TAKEOFF, rồi HOLD |
 | `land` | Cùng MAV_CMD_NAV_LAND từ ARM trên đất hoặc lúc bay; theo dõi riêng ACK và mode |
 | `disarm` | Một lệnh dừng motor cưỡng bức cả trên đất và trên không, gọi API `Action.kill()` nội bộ |
 
 HOLD là tự động. DISARM trên không có thể làm UAV rơi; LAND là hạ cánh có điều khiển. Không chờ khóa đích, health hay
 telemetry mặt đất trước khi gửi DISARM; vẫn cần kết nối và quyền actuation.
 
-HOLD không có đồng hồ tự mở khóa. Tọa độ trần bị khóa đến khi chọn FLY.
+HOLD không có đồng hồ tự mở khóa. Chỉ nhận lệnh đầy đủ `fly x y`;
+`fly` hoặc `x y` đơn lẻ bị từ chối.
+`pause` giữ vị trí/độ cao hiện tại và còn đích để `resume`;
+`cancel` không còn đích để tiếp tục. Cả hai chờ telemetry xác nhận HOLD,
+không coi ACK là đã dừng. Cancel giữ x/y/z tại vị trí ước lượng lúc HOLD;
+PX4 vẫn chạy các vòng điều khiển. Cancel không phải LAND hoặc DISARM.
 Nếu TAKEOFF hết deadline mà chưa hoàn tất, HOLD không mở FLY: dùng LAND
 hoặc DISARM và bắt đầu lại từ trạng thái mặt đất đã xác nhận. Nếu FLY quá
-hạn sau một TAKEOFF đã hoàn tất, người dùng có thể chọn FLY tường minh
+hạn sau một TAKEOFF đã hoàn tất, người dùng có thể gửi `fly x y` tường minh
 để gửi đích mới từ HOLD; không tự tiếp tục đích quá hạn.
 
 ## Bước FLY: đặt đích và giới hạn kiểm chứng
@@ -144,7 +174,8 @@ yêu cầu LAND một lần, ghi lỗi; không retry/giành lại mode tự đ�
 
 `phase` của Pi khác `telemetry.flight_mode.value` của PX4. Khi TAKEOFF/FLY/
 SETTLING, PX4 là OFFBOARD. Khi HOLD đã xác nhận, PX4 là HOLD; khi chọn
-FLY_READY, PX4 vẫn HOLD, chỉ vào OFFBOARD khi có đích mới và prestream.
+PX4 vẫn HOLD đến khi nhận `fly x y`, chỉ vào OFFBOARD sau khi có đích mới
+và prestream.
 MAVSDK tự ngừng setpoint khi heartbeat cho biết rời OFFBOARD. Không dùng
 `Offboard.stop()` sau LAND; không hủy plugin trong đường LAND bình thường.
 
@@ -207,7 +238,9 @@ Offboard khi nối lại. EKF reset chưa được bù tự động; arrival gi�
 | `launch_ned`, `target_ned`, `height_above_launch_m` | Mốc cất cánh, đích cố định và độ cao tăng theo estimator |
 | `target_error_ned_m`, `horizontal_target_error_m` | Sai số ước lượng theo trục/vector; kiểm tra dữ liệu null/cũ |
 | `target_reached`, `takeoff_complete`, `hold_mode_confirmed` | Hoàn thành giám sát và xác nhận mode; không coi ACK là tới đích |
-| `coordinates_enabled`, `can_send_target` | Khả năng nhận tọa độ trần / lệnh FLY tường minh |
+| `coordinates_enabled`, `can_send_target` | Khả năng nhận lệnh đầy đủ `fly x y` |
+| `paused_target_ned`, `pause_confirmed`, `cancel_confirmed` | Đích cũ để Resume và xác nhận Pause/Cancel; Cancel chỉ thành công khi HOLD và có mẫu vị trí mới |
+| `gps_mission.launch_gps`, `return_home_target`, `return_position_confirmed` | GPS chụp lúc TAKEOFF, đích/độ cao quay về và xác nhận PX4 HOLD tại điểm đó |
 | `hold_reason`, `last_error`, `land_request_context` | Nguyên nhân HOLD/lỗi và bối cảnh gửi LAND |
 
 NaN/Inf trong bản status được biểu diễn bằng `null` và liệt kê trong

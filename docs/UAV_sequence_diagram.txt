@@ -57,13 +57,33 @@ note over Pi,PX4: HOLD vô thời hạn đến lệnh mới. NAV_MIN_LTR_ALT có
 loop Trong HOLD
     PX4->>PX4: Phanh và giữ vị trí bằng native Hold; không cần setpoint Offboard
     Người_vận_hành->>Pi: Lệnh mới
-    alt Chỉ nhập x y khi chưa chọn FLY
-        Pi-->>Người_vận_hành: Từ chối; HOLD khóa tọa độ
-    else fly rồi x y, hoặc fly x y
+    alt Chỉ nhập fly hoặc x y đơn lẻ
+        Pi-->>Người_vận_hành: Từ chối; cần lệnh đầy đủ fly x y
+    else fly x y
         Pi->>Pi: Yêu cầu TAKEOFF hoàn tất, mode HOLD mới, health tốt
         Pi->>PX4: Setpoint mới, prestream, OFFBOARD; không ARM lại
         Pi->>Pi: FLY; khóa thay đích đến HOLD tiếp theo
     end
+end
+
+alt Pause/Resume trong local FLY
+    Người_vận_hành->>Pi: pause
+    Pi->>Pi: Lưu đích x/y/z đang bay
+    Pi->>PX4: Action.hold()
+    PX4-->>Pi: Mode HOLD mới
+    Pi->>Pi: PAUSED; không tự Resume
+    Người_vận_hành->>Pi: resume
+    Pi->>PX4: Gửi lại đúng đích cũ, prestream, OFFBOARD
+    PX4-->>Pi: Mode OFFBOARD mới; tiếp tục FLY, không ARM lại
+else Cancel trong local FLY/PAUSED
+    Người_vận_hành->>Pi: cancel
+    Pi->>PX4: Action.hold(), chờ mode HOLD mới
+    PX4-->>Pi: Vị trí x/y/z mới sau HOLD
+    Pi->>Pi: Bỏ đích cũ; xác nhận Cancel tại vị trí/độ cao hiện tại
+else Về độ cao TAKEOFF theo lệnh riêng
+    Người_vận_hành->>Pi: return-height sau HOLD
+    Pi->>PX4: OFFBOARD giữ x/y hiện tại, z về mốc TAKEOFF
+    PX4-->>Pi: Độ cao trong ngưỡng rồi HOLD
 end
 
 alt LAND, ưu tiên qua khóa đích khi console nhận lệnh
@@ -80,6 +100,16 @@ else DISARM, ưu tiên qua khóa đích khi console nhận lệnh
     Pi->>PX4: Force motor stop; không chờ điều kiện mặt đất/vị trí
     PX4-->>Pi: ACK; sau đó telemetry armed=false
     note over Người_vận_hành,PX4: DISARM trên không có thể làm UAV rơi; khác với LAND.
+else Quay về điểm cất cánh rồi HOLD
+    Người_vận_hành->>Pi: return-home
+    note over Người_vận_hành,Pi: Đích đang chạy phải Cancel và chờ HOLD trước return-home.
+    Pi->>PX4: Action.hold(), chờ HOLD mới
+    Pi->>PX4: Upload Mission một waypoint tại GPS chụp lúc TAKEOFF ở độ cao hiện tại
+    PX4->>PX4: Dẫn đường về waypoint, không có lệnh LAND
+    PX4-->>Pi: Mission finished; Pi yêu cầu HOLD nếu còn MISSION
+    PX4-->>Pi: HOLD + GPS/cao độ mới
+    Pi->>Pi: HOME_COMPLETE khi trong ngưỡng; chờ land riêng
+    note over Pi,PX4: Đây là Mission quay về, không phải PX4 RTL; ACK upload/start chưa xác nhận đã về.
 end
 
 note over Pi,PX4: HOLD bị từ chối hoặc quá hạn xác nhận: yêu cầu LAND một lần, ghi lỗi; không retry/tự giành lại quyền.

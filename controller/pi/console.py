@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Console for Pi serial control or local PC HITL via the simulator's UDP bridge."""
+"""Console for serial Pixhawk control or local UDP through a MAVLink bridge."""
 import argparse
 import faulthandler
 from contextlib import ExitStack
@@ -14,24 +14,29 @@ from datetime import datetime, timezone
 from pathlib import Path
 from deployment import validate_connection
 from serial_lock import serial_ownership, udp_ownership
-from offboard_control import OffboardControl
+from gps_mission import GpsMissionControl, GpsLimits
 from flight_policy import FlightPolicy
 
 HELP = '''arm         ARM only on ground; motors may spin; no Offboard or climb
 takeoff     Start OFFBOARD climb; accepts separate ARM or arms from IDLE
-x y         Target metres N/E; accepted only after selecting FLY
-fly         Enable coordinate input from confirmed HOLD
-fly x y     Explicitly leave HOLD and fly to absolute local NED x/y
+fly x y     Leave HOLD and fly to absolute local NED x/y (also: fly x,y)
 land        Request PX4 LAND
+return-home Return to captured takeoff GPS at current height, then HOLD
+return-height Move vertically to TAKEOFF height at current x/y, then HOLD
 disarm      Force motors off on ground OR in flight; vehicle may fall
+gps-plan A_lat A_lon B_lat B_lon height speed  Stage two GPS waypoints
+gps-start   On ground: TAKEOFF/HOLD then A then B; in HOLD: start A then B
+pause       HOLD current FLY or GPS mission, retaining its target
+resume      Continue the paused local or GPS target
+cancel      Discard target and HOLD at current position/height
 status      Read PX4 telemetry, application phase, target confirmation and locks
 help        Show commands
 exit        End signal stream; does NOT send LAND
 X/Y origin: PX4 estimator local origin. Nonzero x/y/z alone does not diagnose a GPS fault.
 Z target: launch down_m minus --height; height stays fixed for this flight.
-Targets stay locked during TAKEOFF, FLY, SETTLING and HOLD_REQUESTED.
+New coordinates stay locked during TAKEOFF, FLY, SETTLING and HOLD_REQUESTED.
 At target: position/yaw dwell supervision by console, then native PX4 HOLD.
-HOLD is indefinite. Raw coordinates stay locked until FLY is explicitly selected.
+HOLD is indefinite. A new local target requires an explicit fly x y command.
 '''
 
 
@@ -40,14 +45,33 @@ def parse_command(line):
     if not words:
         return 'empty', None
     if len(words) == 1 and words[0].lower() in {
-            'arm', 'takeoff', 'fly', 'land', 'disarm', 'status', 'help', 'exit', 'quit'}:
+            'arm', 'takeoff', 'land', 'return-home', 'return-height', 'disarm',
+            'status', 'help', 'exit', 'quit',
+            'gps-start',
+            'pause', 'resume', 'cancel'}:
         return ('exit' if words[0].lower() == 'quit' else words[0].lower()), None
-    if words[0].lower() == 'fly':
-        words = words[1:]
-    if len(words) != 2:
-        raise ValueError('Use arm, takeoff, fly, fly x y, land, disarm, status, help or exit')
+    if words[0].lower() == 'gps-plan':
+        if len(words) != 7:
+            raise ValueError('Use gps-plan A_lat A_lon B_lat B_lon height_m speed_m_s')
+        try:
+            values = tuple(float(value) for value in words[1:])
+        except ValueError:
+            raise ValueError('GPS plan fields must be numeric') from None
+        if not all(math.isfinite(value) for value in values):
+            raise ValueError('GPS plan fields must be finite')
+        return 'gps-plan', values
+    if words[0].lower() != 'fly':
+        raise ValueError('Use fly x y or help to list commands')
+    if len(words) == 2 and ',' in words[1]:
+        values = words[1].split(',')
+    elif len(words) == 3:
+        values = words[1:]
+    else:
+        raise ValueError('Use fly x y (or fly x,y)')
+    if len(values) != 2 or not all(values):
+        raise ValueError('Use fly x y (or fly x,y)')
     try:
-        xy = tuple(float(v) for v in words)
+        xy = tuple(float(v) for v in values)
     except ValueError:
         raise ValueError('x y must be numeric metres') from None
     if not all(math.isfinite(v) and abs(v) <= 10000 for v in xy):
@@ -67,12 +91,21 @@ def execute(fc, line, output=print):
     elif command == 'status':
         output(json.dumps(fc.status(), indent=2, allow_nan=False))
     else:
-        if command == 'fly':
-            if xy is None:
-                fc.fly()
-            else:
-                explicit = shlex.split(line)[0].lower() == 'fly'
-                fc.fly(*xy, explicit=explicit)
+        if command == 'gps-plan':
+            output(json.dumps(fc.gps_plan(*xy), indent=2, allow_nan=False))
+            output('Plan staged on Pi only. gps-start is required to upload/start it.')
+        elif command == 'gps-start':
+            getattr(fc, command.replace('-', '_'))()
+            output('GPS request sent; check status for PX4 mode/mission confirmation.')
+        elif command in {'pause', 'resume', 'cancel'}:
+            getattr(fc, command)()
+            output('Request sent; check status for PX4 mode/target confirmation.')
+        elif command == 'fly':
+            fc.fly(*xy)
+        elif command == 'return-home':
+            fc.return_home()
+        elif command == 'return-height':
+            fc.return_height()
         else:
             getattr(fc, command)()
         if command == 'arm':
@@ -87,8 +120,12 @@ def execute(fc, line, output=print):
         elif command == 'land':
             output('LAND acknowledged. Connection remains open; check land_mode_confirmed, '
                    'then ON_GROUND and armed=false. Do not exit yet.')
-        elif command == 'fly' and xy is None:
-            output('FLY selected. PX4 remains in HOLD until you enter x y; no motion commanded yet.')
+        elif command == 'return-home':
+            output('Return request sent. Wait for phase=HOME_COMPLETE, PX4 HOLD and '
+                   'return_position_confirmed=true; use land separately.')
+        elif command == 'return-height':
+            output('Height request processed. Wait for phase=HOLD and check '
+                   'height_above_launch_m; use land separately.')
         else:
             output('Request sent. Observe PX4/Gazebo; this is not confirmation of arrival.')
     return True
@@ -129,6 +166,12 @@ def main():
     parser.add_argument('--yaw-tolerance', type=float, default=10.0, help='Arrival yaw tolerance, degrees')
     parser.add_argument('--settle-time', type=float, default=2.0, help='Fresh in-tolerance dwell before HOLD, seconds')
     parser.add_argument('--target-timeout', type=float, default=60.0, help='Target deadline before HOLD, seconds')
+    parser.add_argument('--gps-max-leg', type=float, default=10.0,
+                        help='Maximum length of each current-to-A and A-to-B leg in metres')
+    parser.add_argument('--gps-max-height', type=float, default=3.0,
+                        help='Maximum height above launch in metres for a GPS mission')
+    parser.add_argument('--gps-max-speed', type=float, default=0.5,
+                        help='Maximum GPS mission speed in m/s')
     parser.add_argument('--log-dir', default='session-logs', help='Controller diagnostic log directory')
     parser.add_argument('--enable-actuation', action='store_true')
     parser.add_argument('--check', action='store_true', help='Read state, never send flight commands')
@@ -141,6 +184,11 @@ def main():
         policy = FlightPolicy(xy_tolerance_m=args.xy_tolerance, z_tolerance_m=args.z_tolerance,
                               yaw_tolerance_deg=args.yaw_tolerance, settle_s=args.settle_time,
                               target_timeout_s=args.target_timeout)
+        gps_limits = GpsLimits(max_leg_m=args.gps_max_leg,
+                               max_height_m=args.gps_max_height,
+                               max_speed_m_s=args.gps_max_speed)
+        if gps_limits.max_height_m < args.height:
+            raise ValueError('gps-max-height must be at least takeoff --height')
         if policy.z_tolerance_m >= args.height:
             raise ValueError('z-tolerance must be less than height')
     except ValueError as error:
@@ -170,9 +218,9 @@ def main():
         stack.callback(faulthandler.disable)
         ownership = udp_ownership if device.startswith('udpin://') else serial_ownership
         stack.enter_context(ownership(device))
-        fc = OffboardControl(args.connection, args.profile,
-                             args.enable_actuation and not args.check, args.system_id, args.height,
-                             policy=policy)
+        fc = GpsMissionControl(args.connection, args.profile,
+                               args.enable_actuation and not args.check, args.system_id,
+                               args.height, policy=policy, gps_limits=gps_limits)
         stack.callback(fc.close)
         if args.check:
             wait_initial_status(fc)

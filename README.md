@@ -25,9 +25,9 @@ PC / QGroundControl ↔ UDP qua mạng ↔ Pi ↔ USB Type-C ↔ Pixhawk/PX4 →
 PC / terminal       ↔ SSH         ↔ Pi/console
 ```
 
-Đường UDP cần dịch vụ chuyển tiếp MAVLink trên Pi, cấu hình riêng ngoài
-repository. Sơ đồ này mô tả cách kết nối thiết bị; xem giới hạn chia sẻ
-cổng USB ở phần dưới trước khi chạy QGC và console cùng lúc.
+Đường UDP dùng MAVLink Router trên Pi để chia sẻ một cổng USB cho QGC
+và console. Cách cài/chạy được ghi trong
+[hướng dẫn chuyển sang UAV thật](controller/docs/HARDWARE_SETUP.md).
 
 ## Cấu trúc dự án
 
@@ -123,7 +123,8 @@ PC console ↔ UDP 127.0.0.1:14540 ↔ Gazebo Classic ↔ USB ↔ Pixhawk HITL
 
 Chỉ một console/observer dùng UDP 14540; đóng observer trước khi mở console.
 Không cần Pi cho cách kiểm tra này. Profile `hitl` vẫn kiểm tra `SYS_HITL=1`;
-profile `hardware` tiếp tục yêu cầu serial, không nhận kết nối UDP.
+profile `hardware` dùng trên Pi với router USB/UDP được hướng dẫn ở phần
+UAV thật bên dưới.
 Đã chạy bài bay HITL ngày 26/10: TAKEOFF/HOLD/FLY/LAND, LAND ưu tiên và mất luồng Offboard; xem [số đo và giới hạn](simulation/docs/ALGORITHM_VALIDATION_2026-10-26.md). Sau khi import file HITL, reboot, kiểm tra `SYS_HITL=1`, IDLE, DISARM, ON_GROUND, dữ liệu mới và preflight đạt:
 
 ```bash
@@ -145,19 +146,24 @@ chạy console trên Pi không cần UDP API từ máy điều khiển.
 Từ gốc dự án trên PC, thay địa chỉ SSH bằng địa chỉ Pi thực tế:
 
 ```bash
-ssh pi@<PI_IP> 'mkdir -p ~/uav/controller'
+ssh pi@<PI_IP> 'mkdir -p ~/uav/releases/2026-10-26/controller'
 rsync -av --exclude='.venv/' --exclude='__pycache__/' \
-  --exclude='session-logs/' controller/ pi@<PI_IP>:~/uav/controller/
+  --exclude='session-logs/' controller/ \
+  pi@<PI_IP>:~/uav/releases/2026-10-26/controller/
 ```
 
 Trên Pi:
 
 ```bash
-cd ~/uav/controller
+cd ~/uav/releases/2026-10-26/controller
 python3 -m venv .venv
 .venv/bin/python -m pip install -r pi/requirements.txt
 python3 -B -m unittest discover -s tests -p 'test_*.py'
 ```
+
+Trên Pi của dự án này, `~/uav/control` là đường dẫn tắt tới thư mục
+release trên. Dùng `cd ~/uav/control` để vào bản hiện tại; `~/UAV_proj_OLD`
+là bản code cũ đã đổi tên, không dùng để chạy bay.
 
 MAVSDK được ghim `4.0.6`. Tạo venv trên từng máy/đúng đường dẫn; venv cũ
 cần tạo lại nếu đã di chuyển thư mục. Sau mỗi lần cập nhật, chỉ đồng bộ
@@ -186,24 +192,20 @@ ls -l /dev/serial/by-id/
 
 USB serial thường xuất hiện dưới tên `/dev/ttyACM0`; phải dùng tên thực
 tế trên Pi, ưu tiên đường dẫn ổn định `/dev/serial/by-id/...` khi có.
-Console hiện nhận URI `serial:///dev/DEVICE:BAUD`, nên có thể dùng USB
-serial mà không đổi code. Các ví dụ bay thật bên dưới dùng
-`serial:///dev/ttyACM0:921600`; đây không còn là UART GPIO `/dev/ttyAMA0`.
+Console nhận URI `serial:///dev/DEVICE:BAUD` khi mở USB trực tiếp, hoặc
+`udpin://127.0.0.1:14540` khi router giữ USB. Thiết bị USB trong ví dụ
+router là `/dev/ttyACM0`; đây không phải UART GPIO `/dev/ttyAMA0`.
 
-UDP là đường MAVLink giữa QGC trên PC và dịch vụ chuyển tiếp trên Pi,
-chẳng hạn MAVLink Router. Dự án chưa kèm dịch vụ/cấu hình này và chưa
-nhận các chuỗi lệnh `arm`, `fly`, `land` qua UDP. Để nhập những lệnh đó,
-SSH vào Pi rồi chạy console. Tham khảo
+UDP từ PC tới Pi là đường MAVLink của QGC. Sau khi SSH từ PC vào Pi,
+console nhận lệnh gõ trong terminal và nối MAVLink Router tại
+`udpin://127.0.0.1:14540`. Router giữ USB Pixhawk, gửi telemetry tới
+QGC trên PC qua UDP 14550 và chuyển lệnh từ console về Pixhawk. Không
+chạy router và console cùng mở trực tiếp cổng USB. Router và `--check`
+đã xác nhận kết nối Pi/Pixhawk thật; chưa có xác nhận bay thật bằng đường
+này. QGC cũng đi qua Pi/router nên sẽ mất kết nối nếu Pi tắt; cần đường
+tiếp quản độc lập và failsafe phù hợp. Xem
+[quy trình trước, trong và sau bay](controller/docs/HARDWARE_SETUP.md) và
 [kiến trúc companion của PX4](https://docs.px4.io/main/en/companion_computer/index).
-
-Chỉ một tiến trình được giữ cổng USB Pixhawk. Lệnh console nối trực tiếp
-USB ở dưới dùng khi router không giữ cổng đó. Nếu router đang giữ USB để
-phục vụ QGC qua UDP, không chạy thêm console mở cùng USB: cần cấu hình
-router cấp một cổng serial ảo riêng cho console, hoặc bổ sung hỗ trợ
-console kết nối router qua UDP. Repository hiện chưa triển khai hai cách
-chia sẻ này cho profile `hardware`, vốn chỉ nhận serial. UDP loopback chỉ
-được hỗ trợ cho HITL trên PC ở mục trên. Đường QGC qua UDP và console qua USB chưa được kiểm chứng
-chạy đồng thời trong cấu hình này.
 
 ### Profile và phạm vi file tham số
 
@@ -227,16 +229,19 @@ Bỏ dòng khỏi file overlay không xóa giá trị đã được nạp trư�
 
 ## Chạy console
 
-Các lệnh trong phần này chạy trên Pi từ `~/uav/controller`, trực tiếp
-hoặc qua SSH từ PC. Ví dụ cho bay thật, Pi đang giữ trực tiếp cổng USB
-Pixhawk và không có router/tiến trình khác giữ cổng đó:
+Các lệnh trong phần này chạy trên Pi từ `~/uav/control` (trỏ tới bản
+release trên), trực tiếp
+hoặc qua SSH từ PC. Với đường USB + MAVLink Router đã khởi động theo
+[hướng dẫn UAV thật](controller/docs/HARDWARE_SETUP.md), kiểm tra:
 
 ```bash
 .venv/bin/python pi/console.py --profile hardware \
-  --connection serial:///dev/ttyACM0:921600 --check
+  --connection udpin://127.0.0.1:14540 --check
 ```
 
-Thay `/dev/ttyACM0` bằng thiết bị USB thực tế. Với HITL, dùng
+Nếu không dùng router/QGC qua UDP, Pi có thể mở USB trực tiếp bằng
+`--connection serial:///dev/ttyACM0:921600` (thay tên cổng thực tế).
+Với HITL, dùng
 `--profile hitl --connection serial:///dev/ttyAMA0:921600` vì Pi nối
 TELEM2, còn USB Pixhawk do PC mô phỏng sử dụng.
 
@@ -249,7 +254,7 @@ Khi đã chuẩn bị đúng thiết bị và môi trường, bật quyền đi�
 
 ```bash
 .venv/bin/python pi/console.py --profile hardware \
-  --connection serial:///dev/ttyACM0:921600 \
+  --connection udpin://127.0.0.1:14540 \
   --height 2 --xy-tolerance 0.5 --z-tolerance 0.3 \
   --yaw-tolerance 10 --settle-time 2 --target-timeout 60 \
   --enable-actuation
@@ -260,17 +265,51 @@ Khi đã chuẩn bị đúng thiết bị và môi trường, bật quyền đi�
 | `arm` | ARM trên đất, không yêu cầu cất cánh; motor có thể quay |
 | `takeoff` | Giữ x/y, lên `height` mét từ mốc z lúc TAKEOFF; tự ARM nếu bắt đầu từ IDLE |
 | `fly x y` | Rời HOLD, tới đích Bắc/Đông tuyệt đối theo gốc EKF, đơn vị mét |
-| `fly`, rồi `x y` | Chọn nhận tọa độ rồi gửi đích |
+| `gps-plan A_lat A_lon B_lat B_lon height speed` | Lưu hai waypoint A/B và độ cao/tốc độ trên Pi; chưa bay |
+| `gps-start` | Từ đất: TAKEOFF/HOLD ở `--height` (mặc định 2 m) rồi bay A→B; từ HOLD sau Cancel: bay A→B ngay. Tại B giữ độ cao đã chọn và HOLD |
+| `pause` / `resume` | Tạm dừng FLY local hoặc nhiệm vụ GPS trong HOLD, rồi tiếp tục đúng đích cũ |
+| `cancel` | Bỏ đích local/GPS và HOLD tại vị trí/độ cao hiện tại; không Resume |
+| `return-home` | Bay về GPS đã chụp lúc TAKEOFF ở độ cao hiện tại; tới nơi thì HOLD, không tự LAND |
+| `return-height` | Tại x/y hiện tại, về độ cao TAKEOFF (`--height`, mặc định 2 m), rồi HOLD |
 | `land` | Yêu cầu PX4 hạ cánh có điều khiển, giữ kết nối |
 | `disarm` | Dừng motor cưỡng bức trên đất hoặc trên không; có thể làm UAV rơi |
 | `status` / `help` | Đọc trạng thái / cú pháp |
 | `exit` | Đóng phiên, ngừng stream; hạ cánh và xác nhận disarm trước khi thoát |
 
 Luồng: `IDLE → ARMED → TAKEOFF → SETTLING → HOLD → FLY → SETTLING → HOLD`.
-ARM riêng là tùy chọn. TAKEOFF/FLY khóa đích, LAND/DISARM đi qua khóa khi
+ARM riêng là tùy chọn. TAKEOFF/FLY khóa đích; LAND/DISARM đi qua khóa khi
 console xử lý lệnh. HOLD tự động, giữ tới lệnh tiếp theo. Mặc định sai số
 ngang 0,5 m, z 0,3 m, yaw 10°, ổn định 2 s; 2 s dùng xác nhận tới đích,
 không phải thời gian tự kết thúc HOLD.
+`pause`/`resume`/`cancel` dùng chung tên lệnh cho local FLY và GPS Mission,
+nhưng gọi API PX4 khác nhau theo trạng thái. Chúng không mở khóa TAKEOFF.
+`land`/`disarm` vẫn được console nhận khi nhiệm vụ đang chạy; `return-home`
+chỉ được nhận sau TAKEOFF hoàn tất và khi không còn đích đang chạy (hãy `cancel` trước).
+Đây không phải ưu tiên thời gian thực: một lệnh
+MAVSDK đang chờ có thể trì hoãn lần đọc lệnh kế tiếp.
+
+Các lệnh GPS mới chỉ được kiểm tra bằng unit test với mock; **chưa thử
+HITL hoặc bay thật**, chưa nối MQTT/web. Mặc định chặn từng chặng
+vị trí hiện tại→A và A→B dài hơn 10 m,
+độ cao GPS trên 3 m và tốc độ GPS trên 0,5 m/s; tốc độ còn bị giới hạn
+theo `MPC_XY_VEL_MAX` đọc từ PX4. Độ cao `height` trong `gps-plan` là
+so với mốc TAKEOFF, còn `--height 2` là mức cất cánh và đích của `return-height`.
+Cancel giữ độ cao hiện tại. Xem quy trình và trạng thái tại
+[WEB_GPS_MISSION.md](controller/docs/WEB_GPS_MISSION.md).
+Thiết kế dự kiến cho MQTT, log Pi, metrics và OTA nằm tại
+[MQTT_OBSERVABILITY_DESIGN.md](controller/docs/MQTT_OBSERVABILITY_DESIGN.md);
+những phần này chưa được triển khai.
+
+Trang web hiện **chưa kết nối** vào phiên điều khiển Pi. Nút web chỉ tương
+đương lệnh terminal khi backend gửi yêu cầu đến **cùng** dịch vụ Pi và nhận
+ACK/trạng thái từ PX4; không gửi chuỗi web/MQTT thẳng vào cổng MAVLink UDP.
+`return-home` **không gọi PX4 RTL**. Sau khi nhiệm vụ cũ đã Cancel hoặc hoàn tất,
+Pi gửi một waypoint
+tại GPS chụp lúc TAKEOFF ở cao độ đang giữ; khi Mission kết thúc, Pi yêu cầu
+PX4 chuyển HOLD rồi
+Pi kiểm tra GPS gần điểm cất cánh và độ cao trong ngưỡng. Muốn hạ cánh,
+gõ `land` riêng. Độ cao là ước lượng estimator, không bảo đảm AGL cố định
+trên địa hình. Xem [WEB_GPS_MISSION.md](controller/docs/WEB_GPS_MISSION.md).
 
 LAND/DISARM chỉ trả IDLE khi telemetry mới có `armed=false` và ON_GROUND.
 Sau đó có thể ARM hoặc TAKEOFF lại nếu PX4 cho phép. ACK khác xác nhận
@@ -315,5 +354,6 @@ controller/.venv/bin/python controller/tools/analyze_logs.py \
 - [Hướng dẫn cho người/agent sửa dự án](AGENT.md)
 - [Báo cáo đầy đủ các lỗi và hướng xử lý](logs/2026-10-24/BAO_CAO_2026-10-24.md)
 - [Trạng thái bay, tham số và quy trình kiểm chứng](docs/FLIGHT_STATES.md)
+- [Chuyển từ HITL sang UAV thật qua Pi/USB và PC/UDP](controller/docs/HARDWARE_SETUP.md)
 - [Cài/chạy mô phỏng trên PC khác](simulation/docs/SETUP.md)
 - [Sơ đồ draw.io](docs/UAV_diagram.drawio), [sequence](docs/UAV_sequence_diagram.txt)

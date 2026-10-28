@@ -344,11 +344,14 @@
         <mxCell id="hold" value="HOLD&#10;PX4 HOLD vô thời hạn" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#edf3fc;strokeColor=#4b6585;fontSize=18;" vertex="1" parent="1">
           <mxGeometry x="600" y="980" width="280" height="85" as="geometry" />
         </mxCell>
-        <mxCell id="input" value="FLY_READY&#10;Cho nhập x/y, PX4 vẫn HOLD" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#edf3fc;strokeColor=#4b6585;fontSize=18;" vertex="1" parent="1">
+        <mxCell id="paused" value="PAUSED&#10;PX4 HOLD, lưu đích FLY cũ" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#edf3fc;strokeColor=#4b6585;fontSize=18;" vertex="1" parent="1">
           <mxGeometry x="1070" y="980" width="280" height="85" as="geometry" />
         </mxCell>
         <mxCell id="land" value="LAND_REQUESTED / LANDING&#10;Cùng API trên đất và khi bay" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#edf3fc;strokeColor=#4b6585;fontSize=18;" vertex="1" parent="1">
           <mxGeometry x="160" y="1250" width="280" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="rtl" value="RETURN-HOME&#10;Mission về GPS cất cánh, rồi HOLD" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#edf3fc;strokeColor=#4b6585;fontSize=18;" vertex="1" parent="1">
+          <mxGeometry x="600" y="1250" width="280" height="85" as="geometry" />
         </mxCell>
         <mxCell id="stop" value="DISARM_REQUESTED&#10;Dừng motor cưỡng bức mọi độ cao" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#edf3fc;strokeColor=#4b6585;fontSize=18;" vertex="1" parent="1">
           <mxGeometry x="1070" y="1250" width="280" height="85" as="geometry" />
@@ -380,19 +383,25 @@
         <mxCell id="e7" value="PX4 HOLD mới" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1" source="request" target="hold">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e8" value="fly" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1" source="hold" target="input">
+        <mxCell id="e8" value="pause: HOLD mới" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1" source="fly" target="paused">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e9" value="x y" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1" source="input" target="fly">
+        <mxCell id="e9" value="resume: đích cũ" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1" source="paused" target="fly">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e10" value="fly x y" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1" source="hold" target="fly">
+        <mxCell id="e10" value="fly x y / return-height" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1" source="hold" target="fly">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="e11" value="target timeout" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1" source="takeoff" target="request">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="e12" value="target timeout" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1" source="fly" target="request">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e13" value="cancel: HOLD tại chỗ" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1" source="fly" target="hold">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e14" value="cancel: HOLD tại chỗ" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1" source="paused" target="hold">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="e15" value="land (ưu tiên qua khóa)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1" source="hold" target="land">
@@ -413,6 +422,12 @@
         <mxCell id="e20" value="chạm đất + disarm" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1" source="land" target="end">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
+        <mxCell id="e_rtl_hold" value="return-home" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1" source="hold" target="rtl">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_rtl_land" value="land riêng sau HOLD" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1" source="rtl" target="land">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
         <mxCell id="e21" value="xác nhận; không chỉ ACK" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1" source="stop" target="end">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
@@ -431,7 +446,7 @@
         <mxCell id="e26" value="ra ngoài ngưỡng FLY" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1" source="settle" target="fly">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="note" value="Pi giám sát acceptance/dwell; không phải PX4 waypoint ACK.&#10;HOLD giữ tới lệnh mới; tọa độ trần chỉ nhận ở FLY_READY.&#10;LAND/DISARM đi qua khóa đích khi console xử lý lệnh.&#10;Sơ đồ rút gọn; xem FLIGHT_STATES.md và status để xác nhận trạng thái." style="rounded=1;whiteSpace=wrap;html=0;fillColor=#edf3fc;strokeColor=#4b6585;fontSize=18;" vertex="1" parent="1">
+        <mxCell id="note" value="Pi giám sát acceptance/dwell; không phải PX4 waypoint ACK.&#10;HOLD giữ tới lệnh fly x y đầy đủ. Pause lưu đích; Resume dùng lại đích; Cancel HOLD tại chỗ.&#10;LAND/DISARM đi qua khóa đích khi console xử lý lệnh.&#10;Sơ đồ rút gọn; xem FLIGHT_STATES.md và status để xác nhận trạng thái." style="rounded=1;whiteSpace=wrap;html=0;fillColor=#edf3fc;strokeColor=#4b6585;fontSize=18;" vertex="1" parent="1">
           <mxGeometry x="80" y="1750" width="1450" height="115" as="geometry" />
         </mxCell>
         <mxCell id="e27" source="armed" target="land" value="land" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1">

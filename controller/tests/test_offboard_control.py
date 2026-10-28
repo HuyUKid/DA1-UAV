@@ -34,6 +34,10 @@ class ControllerTests(unittest.TestCase):
         fc.arrival = ArrivalMonitor(fc.policy)
         fc.nav_min_ltr_alt = -1.0
         fc.motor_stop_kind = None
+        fc.paused_target = None
+        fc.pause_operation_at = None
+        fc.cancel_operation_at = None
+        fc.cancel_confirmed = False
         for key in ('target', 'launch_ned', 'offboard', 'target_started_at', 'hold_operation_at',
                     'motion_kind', 'hold_reason', 'last_error', 'arm_operation_at',
                     'disarm_operation_at', 'land_request_context', 'mavlink_direct', 'direct_handle'):
@@ -201,20 +205,19 @@ class ControllerTests(unittest.TestCase):
     def test_busy_commands_never_mutate_target(self):
         self.takeoff()
         target = dict(self.fc.target)
-        for line in ('fly', '2 3', 'fly 2 3', 'takeoff', 'resume'):
+        for line in ('fly', '2 3', 'fly 2 3', 'takeoff'):
             with self.subTest(line=line), self.assertRaises(ValueError):
                 execute(self.fc, line, output=lambda _: None)
         self.assertEqual(self.fc.target, target)
         self.fc.offboard.set_position_ned.assert_called_once()
 
-    def test_hold_raw_coordinates_require_fly_selection(self):
+    def test_hold_accepts_only_explicit_fly_with_coordinates(self):
         self.held()
-        with self.assertRaisesRegex(ValueError, 'select FLY'):
-            execute(self.fc, '2 3', output=lambda _: None)
-        execute(self.fc, 'fly', output=lambda _: None)
-        self.assertEqual(self.fc.phase, 'FLY_READY')
-        self.assertEqual(self.fc.state('flight_mode'), 'HOLD')
-        execute(self.fc, '2 3', output=lambda _: None)
+        for line in ('2 3', 'fly'):
+            with self.subTest(line=line), self.assertRaises(ValueError):
+                execute(self.fc, line, output=lambda _: None)
+        self.assertEqual(self.fc.phase, 'HOLD')
+        execute(self.fc, 'fly 2,3', output=lambda _: None)
         self.assertEqual(self.fc.phase, 'FLY')
         self.assertEqual(self.fc.target['north_m'], 2)
         self.assertAlmostEqual(self.fc.target['down_m'], 3.231)
@@ -224,6 +227,108 @@ class ControllerTests(unittest.TestCase):
     def test_combined_fly_explicitly_exits_hold(self):
         self.held()
         execute(self.fc, 'fly -2 4', output=lambda _: None)
+        self.assertEqual(self.fc.phase, 'FLY')
+
+    def test_pause_then_resume_reuses_exact_local_target_without_rearm(self):
+        self.held()
+        self.fc.fly(5, 6)
+        original = dict(self.fc.target)
+        self.put('local_ned', dict(north_m=2, east_m=3, down_m=original['down_m']))
+        execute(self.fc, 'pause', output=lambda _: None)
+        self.assertEqual(self.fc.phase, 'PAUSE_REQUESTED')
+        self.assertEqual(self.fc.paused_target, original)
+        self.put('flight_mode', 'HOLD')
+        self.fc.refresh()
+        self.assertEqual(self.fc.phase, 'PAUSED')
+        self.assertTrue(self.fc.status()['pause_confirmed'])
+        self.assertTrue(self.fc.status()['hold_mode_confirmed'])
+        execute(self.fc, 'resume', output=lambda _: None)
+        self.assertEqual(self.fc.phase, 'FLY')
+        self.assertEqual(self.fc.target, original)
+        self.assertIsNone(self.fc.paused_target)
+        self.fc.action.arm.assert_called_once()
+
+    def test_pause_ack_without_new_hold_mode_does_not_enable_resume(self):
+        self.held()
+        self.fc.fly(5, 6)
+        self.fc.action.hold.side_effect = None
+        execute(self.fc, 'pause', output=lambda _: None)
+        self.assertEqual(self.fc.phase, 'PAUSE_REQUESTED')
+        with self.assertRaises(ValueError):
+            execute(self.fc, 'resume', output=lambda _: None)
+        self.put('flight_mode', 'HOLD')
+        self.fc.refresh()
+        self.assertEqual(self.fc.phase, 'PAUSED')
+
+    def test_pause_ack_error_can_still_confirm_late_hold(self):
+        self.held()
+        self.fc.fly(5, 6)
+        self.fc.action.hold.side_effect = RuntimeError('ACK timeout')
+        with self.assertRaises(RuntimeError):
+            execute(self.fc, 'pause', output=lambda _: None)
+        self.assertEqual(self.fc.phase, 'PAUSE_REQUESTED')
+        self.fc.action.land.assert_not_called()
+        self.put('flight_mode', 'HOLD')
+        self.fc.refresh()
+        self.assertEqual(self.fc.phase, 'PAUSED')
+
+    def test_cancel_from_paused_local_fly_drops_saved_target(self):
+        self.held()
+        self.fc.fly(5, 6)
+        execute(self.fc, 'pause', output=lambda _: None)
+        self.put('flight_mode', 'HOLD')
+        self.fc.refresh()
+        self.put('local_ned', dict(north_m=2, east_m=3, down_m=3.231))
+        execute(self.fc, 'cancel', output=lambda _: None)
+        self.assertEqual(self.fc.phase, 'HOLD')
+        self.assertIsNone(self.fc.paused_target)
+        self.assertTrue(self.fc.cancel_confirmed)
+        with self.assertRaises(ValueError):
+            execute(self.fc, 'resume', output=lambda _: None)
+
+    def test_cancel_local_fly_holds_at_current_xy_and_takeoff_height(self):
+        self.held()
+        self.fc.fly(5, 6)
+        self.put('local_ned', dict(north_m=2, east_m=3, down_m=3.231))
+        execute(self.fc, 'cancel', output=lambda _: None)
+        self.assertEqual(self.fc.phase, 'CANCEL_REQUESTED')
+        self.put('flight_mode', 'HOLD')
+        self.fc.refresh()
+        self.assertEqual(self.fc.phase, 'HOLD')
+        self.assertEqual(self.fc.hold_reason, 'CANCELLED')
+        self.assertTrue(self.fc.status()['cancel_confirmed'])
+        self.assertTrue(self.fc.status()['hold_mode_confirmed'])
+        self.assertEqual((self.fc.target['north_m'], self.fc.target['east_m']), (2, 3))
+        with self.assertRaises(ValueError):
+            execute(self.fc, 'resume', output=lambda _: None)
+
+    def test_cancel_ack_error_can_still_confirm_late_hold(self):
+        self.held()
+        self.fc.fly(5, 6)
+        self.put('local_ned', dict(north_m=2, east_m=3, down_m=3.231))
+        self.fc.action.hold.side_effect = RuntimeError('ACK timeout')
+        with self.assertRaises(RuntimeError):
+            execute(self.fc, 'cancel', output=lambda _: None)
+        self.assertEqual(self.fc.phase, 'CANCEL_REQUESTED')
+        self.fc.action.land.assert_not_called()
+        self.put('flight_mode', 'HOLD')
+        self.fc.refresh()
+        self.assertTrue(self.fc.cancel_confirmed)
+
+    def test_cancel_local_fly_keeps_current_height_and_allows_new_fly(self):
+        self.held()
+        self.fc.fly(5, 6)
+        self.put('local_ned', dict(north_m=2, east_m=3, down_m=2.731))
+        self.put('position', dict(latitude_deg=10, longitude_deg=106,
+                                  relative_altitude_m=2.5))
+        execute(self.fc, 'cancel', output=lambda _: None)
+        self.put('flight_mode', 'HOLD')
+        self.fc.refresh()
+        self.assertEqual(self.fc.phase, 'HOLD')
+        self.assertEqual(self.fc.hold_reason, 'CANCELLED')
+        self.assertAlmostEqual(self.fc.target['down_m'], 2.731)
+        self.assertTrue(self.fc.cancel_confirmed)
+        self.fc.fly(3, 4)
         self.assertEqual(self.fc.phase, 'FLY')
 
 
@@ -266,8 +371,14 @@ class ControllerTests(unittest.TestCase):
         self.fc.action.land.assert_called_once()
         self.assertIn('NAV_MIN_LTR_ALT', self.fc.last_error)
 
+    def test_takeoff_rejects_known_hold_minimum_above_requested_height(self):
+        self.fc.nav_min_ltr_alt = 5
+        with self.assertRaisesRegex(ValueError, 'NAV_MIN_LTR_ALT'):
+            self.fc.takeoff()
+        self.fc.action.arm.assert_not_called()
+
     def test_land_preempts_all_flight_phases(self):
-        for phase in ('TAKEOFF', 'FLY', 'SETTLING', 'HOLD_REQUESTED', 'HOLD', 'FLY_READY'):
+        for phase in ('TAKEOFF', 'FLY', 'SETTLING', 'HOLD_REQUESTED', 'HOLD'):
             with self.subTest(phase=phase):
                 self.fc = self.make_fc()
                 self.takeoff()
@@ -383,10 +494,10 @@ class ControllerTests(unittest.TestCase):
             self.fc.arm()
 
     def test_parser(self):
-        self.assertEqual(parse_command('fly'), ('fly', None))
         self.assertEqual(parse_command('fly 2 3'), ('fly', (2, 3)))
-        self.assertEqual(parse_command('FLY'), ('fly', None))
-        for line in ('NaN 0', 'inf 1', '10001 0', 'fly 1', '1 2 3', 'arm 1', 'kill', 'unarm', 'hold', 'resume'):
+        self.assertEqual(parse_command('FLY 2,3'), ('fly', (2, 3)))
+        for line in ('fly', '2 3', 'NaN 0', 'inf 1', '10001 0', 'fly 1',
+                     '1 2 3', 'arm 1', 'kill', 'unarm', 'hold'):
             with self.subTest(line=line), self.assertRaises(ValueError):
                 parse_command(line)
 

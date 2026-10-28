@@ -39,9 +39,22 @@ Phần `simulation/` phải có thể chép sang PC khác mà không cần code 
 - Console hiện dùng local NED: x Bắc, y Đông, z xuống, đơn vị mét. Không
   diễn giải x/y là kinh/vĩ độ hoặc quãng đường tương đối.
 - TAKEOFF chụp mốc cất cánh: `z_target = z_launch - height`; giữ x/y đã
-  chụp. FLY giữ đích z của chuyến. Không dời đích theo vị trí đang trôi.
-- Các lệnh bay là `arm`, `takeoff`, `fly`, `land`, `disarm`. HOLD tự động
-  và giữ tới lệnh tiếp theo. Không tự thêm HOLD/RESUME/KILL riêng vào console.
+  chụp. FLY giữ z của HOLD gần nhất (sau Cancel là z tại chỗ).
+  Không dời đích theo vị trí đang trôi.
+- Nhánh local NED dùng `arm`, `takeoff`, `fly x y`, `land`, `disarm`;
+  `pause`/`resume` giữ và tiếp tục đúng đích FLY cũ, `cancel` bỏ đích và
+  HOLD tại vị trí/độ cao hiện tại. Không thêm lệnh HOLD/KILL riêng.
+- Nhánh GPS dùng `gps-plan`, `gps-start` và các lệnh chung
+  `pause`/`resume`/`cancel`: từ đất TAKEOFF/HOLD rồi bay tới A trước B; sau Cancel
+  giữ HOLD tại chỗ và có thể lập A/B/độ cao/tốc độ mới từ trên không.
+  Xem `controller/docs/WEB_GPS_MISSION.md`.
+  Terminal dùng một bộ `pause`, `resume`, `cancel` cho cả local FLY và GPS
+  Mission, chọn theo trạng thái hiện tại. Sau khi Cancel/hoàn tất đích cũ,
+  `return-home` tạo waypoint GPS tại điểm TAKEOFF ở độ cao hiện tại, rồi HOLD; không gọi
+  PX4 RTL và không tự LAND.
+  Mission GPS kết thúc ở B tại độ cao được chọn; chỉ `return-height` mới
+  yêu cầu về độ cao TAKEOFF tại x/y hiện tại. Sau GPS Cancel, nhận `fly x y`.
+  Các lệnh này hiện chạy qua terminal, chưa nối MQTT/web hoặc kiểm chứng bay.
 - TAKEOFF/FLY khóa đích đang thực hiện. LAND/DISARM đi qua khóa đích khi
   console xử lý lệnh; không tuyên bố ưu tiên này là bảo đảm thời gian thực.
 - Một lệnh `disarm` hiện dùng force-stop cả trên đất và trên không, nội bộ
@@ -57,9 +70,10 @@ Phần `simulation/` phải có thể chép sang PC khác mà không cần code 
 
 ## Tham số, model và thiết bị
 
-- Kiểm tra console trên PC dùng profile `hitl` với
-  `udpin://127.0.0.1:14540`, qua bridge của Gazebo giữ USB. Hardware vẫn
-  chỉ dùng serial. Không chạy console và observer cùng chiếm UDP 14540.
+- Console trên PC dùng profile `hitl` với `udpin://127.0.0.1:14540` qua
+  bridge Gazebo giữ USB. Profile `hardware` trên Pi cũng nhận UDP loopback
+  khi MAVLink Router giữ USB Pixhawk và chuyển tiếp tới QGC trên PC.
+  Không chạy console và observer cùng chiếm UDP 14540.
 - Trước reset/nạp tham số, bản sao phải được xác minh giá trị và kiểu,
   không chỉ đếm đủ PARAM_VALUE. Với frame MAVLink 2, không giả định
   `get_payload()` của parser v1 bỏ đúng header; kiểm tra bytes từ frame

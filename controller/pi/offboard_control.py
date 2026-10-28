@@ -11,7 +11,8 @@ from pixhawk import Pixhawk, json_safe
 
 class OffboardControl(Pixhawk):
     FLIGHT_PHASES = {'STARTING', 'TAKEOFF', 'FLY', 'SETTLING'}
-    HOLD_PHASES = {'HOLD_REQUESTED', 'HOLD', 'FLY_READY'}
+    HOLD_PHASES = {'HOLD_REQUESTED', 'HOLD', 'PAUSE_REQUESTED', 'PAUSED',
+                   'CANCEL_REQUESTED', 'CANCEL_UNCONFIRMED'}
 
     def __init__(self, connection, profile, enabled=False, system_id=1, height=2.0, policy=None):
         self.height = number(height, 'height', 0.5, 100)
@@ -42,6 +43,10 @@ class OffboardControl(Pixhawk):
         self.hold_operation_at = None
         self.hold_reason = None
         self.last_error = None
+        self.paused_target = None
+        self.pause_operation_at = None
+        self.cancel_operation_at = None
+        self.cancel_confirmed = False
         super().__init__(connection, profile, enabled, system_id)
         try:
             self._subscribe_offboard(system_id)
@@ -121,11 +126,14 @@ class OffboardControl(Pixhawk):
                     self.offboard_seen = True
                 elif self.offboard_seen:
                     self.external = True  # Latch even if modes change back before input.
-            elif self.phase in {'HOLD', 'FLY_READY'} and name != 'HOLD':
+            elif self.phase in {'PAUSE_REQUESTED', 'CANCEL_REQUESTED'}:
+                if name not in {'OFFBOARD', 'HOLD'}:
+                    self.external = True
+            elif self.phase in {'HOLD', 'PAUSED', 'CANCEL_UNCONFIRMED'} and name != 'HOLD':
                 self.external = True
 
     def ready_for_fly(self):
-        if (self.phase not in {'HOLD', 'FLY_READY'} or self.external
+        if (self.phase != 'HOLD' or self.external
                 or not self.takeoff_complete):
             return False
         try:
@@ -156,6 +164,19 @@ class OffboardControl(Pixhawk):
             self.phase = 'EXTERNAL'
             self.arrival.reset()
             self.stop_stream()  # Destroy stops sending; unlike stop(), no HOLD command.
+        if self.phase == 'PAUSE_REQUESTED':
+            if self._mode_after('HOLD', self.pause_operation_at):
+                self.phase = 'PAUSED'
+            elif time.monotonic() - self.pause_operation_at > 5:
+                self.paused_target = None
+                self.last_error = 'Pause HOLD was not confirmed; requesting HOLD again'
+                self._request_hold('PAUSE_TIMEOUT')
+        if self.phase == 'CANCEL_REQUESTED':
+            if self._mode_after('HOLD', self.cancel_operation_at):
+                self._finalize_cancel_hold()
+            elif time.monotonic() - self.cancel_operation_at > 5:
+                self.last_error = 'Cancel HOLD was not confirmed; requesting HOLD again'
+                self._request_hold('CANCEL_TIMEOUT')
         if self.phase in {'TAKEOFF', 'FLY', 'SETTLING'}:
             self.refresh_arrival()
         if self.phase == 'HOLD_REQUESTED':
@@ -202,6 +223,8 @@ class OffboardControl(Pixhawk):
                         self.phase = 'IDLE'
                         self.takeoff_complete = False
                         self.target_reached = False
+                        self.paused_target = None
+                        self.cancel_confirmed = False
                         self.arrival.reset()
             except ValueError:
                 pass
@@ -219,8 +242,11 @@ class OffboardControl(Pixhawk):
                                        if self.arrival.since is not None else 0.0)
         result['hold_acknowledged'] = self.hold_acknowledged
         result['hold_reason'] = self.hold_reason
+        result['paused_target_ned'] = self.paused_target
+        result['pause_confirmed'] = self.phase == 'PAUSED'
+        result['cancel_confirmed'] = self.cancel_confirmed
         result['last_error'] = self.last_error
-        result['coordinates_enabled'] = self.phase == 'FLY_READY' and self.ready_for_fly()
+        result['coordinates_enabled'] = self.ready_for_fly()
         result['target_ned'] = self.target
         result['coordinate_frame'] = 'PX4 local NED; x/y absolute, height above launch'
         result['launch_ned'] = self.launch_ned
@@ -245,7 +271,9 @@ class OffboardControl(Pixhawk):
         except ValueError:
             result['position_from_launch_m'] = None
             result['height_above_launch_m'] = None
-        result['target_locked'] = self.phase in self.FLIGHT_PHASES | {'HOLD_REQUESTED', 'HOLD'}
+        result['target_locked'] = self.phase in self.FLIGHT_PHASES | {
+            'HOLD_REQUESTED', 'PAUSE_REQUESTED', 'PAUSED',
+            'CANCEL_REQUESTED', 'CANCEL_UNCONFIRMED'}
         result['flight_termination'] = self.termination
         result['land_acknowledged'] = self.land_acknowledged
         result['arm_acknowledged'] = self.arm_acknowledged
@@ -276,9 +304,12 @@ class OffboardControl(Pixhawk):
             self.phase in {'LAND_REQUESTED', 'LANDING'} and mode == 'LAND'
             and self.operation_at <= mode_at <= time.monotonic()
             and time.monotonic() - mode_at <= 3)
+        hold_epoch = (self.pause_operation_at if self.phase == 'PAUSED' else
+                      self.cancel_operation_at if self.phase == 'HOLD' and
+                      self.hold_reason == 'CANCELLED' else self.hold_operation_at)
         result['hold_mode_confirmed'] = (
-            self.phase in {'HOLD', 'FLY_READY'} and mode == 'HOLD'
-            and self.hold_operation_at is not None and self.hold_operation_at <= mode_at
+            self.phase in {'HOLD', 'PAUSED'} and mode == 'HOLD'
+            and hold_epoch is not None and hold_epoch <= mode_at
             and 0 <= time.monotonic() - mode_at <= 3)
         if self.termination:
             result['required_action'] = (
@@ -291,6 +322,7 @@ class OffboardControl(Pixhawk):
         self.motion_kind = self.phase = kind
         self.target_started_at = time.monotonic()
         self.target_reached = False
+        self.cancel_confirmed = False
         self.hold_acknowledged = False
         self.hold_reason = None
         self.arrival.reset()
@@ -351,6 +383,109 @@ class OffboardControl(Pixhawk):
             self.last_error = f'HOLD failed: {error}; requesting LAND'
             logging.getLogger(__name__).exception(self.last_error)
             self._recover_land()
+
+    def _mode_after(self, mode, epoch):
+        if epoch is None:
+            return False
+        with self.lock:
+            value, at = self.cache.get('flight_mode', (None, 0))
+        try:
+            return (value == mode and epoch <= at <= time.monotonic()
+                    and self.state('armed') is True
+                    and self.state('landed_state', self.policy.telemetry_max_age_s) == 'IN_AIR')
+        except ValueError:
+            return False
+
+    def _guard_hold_altitude(self):
+        if self.nav_min_ltr_alt > 0:
+            altitude = self.state('position', self.policy.telemetry_max_age_s)['relative_altitude_m']
+            if not math.isfinite(altitude) or altitude < self.nav_min_ltr_alt:
+                raise ValueError('NAV_MIN_LTR_ALT would force a climb in HOLD')
+
+    def pause(self):
+        """Pause a local-NED FLY target in native PX4 HOLD; keep its target."""
+        self.require()
+        self.refresh()
+        if (self.phase not in {'FLY', 'SETTLING'} or self.motion_kind != 'FLY'
+                or self.state('flight_mode') != 'OFFBOARD'):
+            raise ValueError('Pause requires an active local FLY target')
+        self._guard_hold_altitude()
+        self.paused_target = dict(self.target)
+        self.pause_operation_at = self.operation_at = time.monotonic()
+        self.phase = 'PAUSE_REQUESTED'
+        self.arrival.reset()
+        self.hold_reason = 'PAUSED'
+        self.hold_acknowledged = False
+        try:
+            self.action.hold()
+            self.hold_acknowledged = True
+        except Exception as error:
+            self.last_error = f'Pause HOLD ACK failed: {error}; awaiting mode confirmation'
+            raise
+
+    def resume(self):
+        """Continue the same saved local-NED target, without rearming."""
+        self.require()
+        self.refresh()
+        if self.phase != 'PAUSED' or self.paused_target is None:
+            raise ValueError('Resume requires confirmed local FLY pause')
+        target = dict(self.paused_target)
+        self._start_target('FLY', target)
+        self.paused_target = None
+
+    def cancel(self):
+        """Discard local FLY target and HOLD at the current position/height."""
+        self.require()
+        self.refresh()
+        if not ((self.phase in {'FLY', 'SETTLING'} and self.motion_kind == 'FLY')
+                or self.phase in {'PAUSE_REQUESTED', 'PAUSED'}):
+            raise ValueError('Cancel requires an active or paused local FLY target')
+        self._guard_hold_altitude()
+        self.paused_target = None
+        self.cancel_confirmed = False
+        if self.phase == 'PAUSED' and self.state('flight_mode') == 'HOLD':
+            with self.lock:
+                self.cancel_operation_at = self.cache['flight_mode'][1]
+            self.phase = 'CANCEL_REQUESTED'
+            self._finalize_cancel_hold()
+            if self.phase in {'CANCEL_UNCONFIRMED', 'LAND_REQUESTED', 'LANDING'}:
+                raise RuntimeError(self.last_error)
+            return
+        self.cancel_operation_at = self.operation_at = time.monotonic()
+        self.phase = 'CANCEL_REQUESTED'
+        self.arrival.reset()
+        try:
+            self.action.hold()
+        except Exception as error:
+            self.last_error = f'Cancel HOLD ACK failed: {error}; awaiting mode confirmation'
+            raise
+
+    def _finalize_cancel_hold(self):
+        try:
+            p = self.state('local_ned', self.policy.telemetry_max_age_s)
+            with self.lock:
+                position_at = self.cache['local_ned'][1]
+                mode_at = self.cache['flight_mode'][1]
+            if position_at < mode_at:
+                if (self.cancel_operation_at is not None and
+                        time.monotonic() - self.cancel_operation_at > 5):
+                    raise ValueError('No fresh position after cancel HOLD')
+                return
+            target = dict(north_m=number(p['north_m'], 'north_m', -10000, 10000),
+                          east_m=number(p['east_m'], 'east_m', -10000, 10000),
+                          down_m=number(p['down_m'], 'down_m', -10000, 10000),
+                          yaw_deg=number(self.state('yaw_deg', self.policy.telemetry_max_age_s),
+                                         'yaw_deg', -180, 180))
+            self.target = target
+            self.phase = 'HOLD'
+            self.hold_reason = 'CANCELLED'
+            self.target_reached = False
+            self.cancel_confirmed = True
+        except Exception as error:
+            if self.phase not in {'LAND_REQUESTED', 'LANDING'}:
+                self.phase = 'CANCEL_UNCONFIRMED'
+            self.last_error = f'Cancel HOLD position was not confirmed: {error}'
+            logging.getLogger(__name__).exception(self.last_error)
 
     def require(self):
         super().require()
@@ -439,6 +574,8 @@ class OffboardControl(Pixhawk):
     def takeoff(self):
         self.require()
         self.refresh()
+        if self.nav_min_ltr_alt > self.height:
+            raise ValueError('NAV_MIN_LTR_ALT exceeds takeoff height; HOLD may climb')
         prearmed = self.phase == 'ARMED' and self.state('armed') is True
         disarmed = self.phase == 'IDLE' and self.state('armed') is False
         if not (prearmed or disarmed) or self.state('landed_state') != 'ON_GROUND':
@@ -493,20 +630,36 @@ class OffboardControl(Pixhawk):
                 self.stop_stream()
             raise
 
-    def fly(self, north=None, east=None, explicit=True):
+    def fly(self, north, east):
         self.require()
         self.refresh()
-        if not self.ready_for_fly() or self.offboard is None:
+        if self.nav_min_ltr_alt > self.height:
+            raise ValueError('NAV_MIN_LTR_ALT exceeds takeoff height; HOLD may climb')
+        if not self.ready_for_fly():
             raise ValueError('FLY requires completed TAKEOFF and confirmed HOLD; targets are locked while busy')
-        if north is None and east is None:
-            self.phase = 'FLY_READY'  # Select input state; native PX4 remains HOLD until a target is sent.
-            return True
         north = number(north, 'x/north', -10000, 10000)
         east = number(east, 'y/east', -10000, 10000)
-        if not explicit and self.phase != 'FLY_READY':
-            raise ValueError('Coordinates are locked in HOLD; select FLY first or use fly x y')
         target = dict(north_m=north, east_m=east, down_m=self.target['down_m'],
                       yaw_deg=self.target['yaw_deg'])
+        self._start_target('FLY', target)
+        return True
+
+    def return_height(self):
+        """Move vertically at the current estimated x/y to TAKEOFF height."""
+        self.require()
+        self.refresh()
+        if not self.ready_for_fly() or self.launch_ned is None:
+            raise ValueError('Return-height requires completed TAKEOFF and confirmed HOLD')
+        if self.nav_min_ltr_alt > self.height:
+            raise ValueError('NAV_MIN_LTR_ALT exceeds the TAKEOFF height')
+        p = self.state('local_ned', self.policy.telemetry_max_age_s)
+        target = dict(north_m=number(p['north_m'], 'north_m', -10000, 10000),
+                      east_m=number(p['east_m'], 'east_m', -10000, 10000),
+                      down_m=self.launch_ned['down_m'] - self.height,
+                      yaw_deg=number(self.state('yaw_deg', self.policy.telemetry_max_age_s),
+                                     'yaw_deg', -180, 180))
+        if abs(number(p['down_m'], 'down_m', -10000, 10000) - target['down_m']) <= self.policy.z_tolerance_m:
+            return False
         self._start_target('FLY', target)
         return True
 
@@ -522,6 +675,8 @@ class OffboardControl(Pixhawk):
         self.phase = 'STARTING'
         self.external, self.offboard_seen = False, False
         try:
+            if self.offboard is None:
+                self.offboard = self.make_offboard()
             self.offboard.set_position_ned(self.Position(**self.target))
             time.sleep(1.2)
             self.require()
@@ -540,6 +695,7 @@ class OffboardControl(Pixhawk):
     def land(self):
         self.require()
         self.arrival.reset()
+        self.paused_target = None
         self.land_request_context = {'phase_before': self.phase,
                                      'offboard_plugin_present': self.offboard is not None}
         for key in ('armed', 'flight_mode', 'landed_state'):
@@ -565,6 +721,7 @@ class OffboardControl(Pixhawk):
         """The single operator DISARM command forces motors off even in flight."""
         self.require()
         self.arrival.reset()
+        self.paused_target = None
         self.phase, self.operation_at = 'DISARM_REQUESTED', time.monotonic()
         self.disarm_operation_at = self.operation_at
         self.disarm_acknowledged = False

@@ -40,13 +40,18 @@ def fake_sdk(hitl=0, connected=True):
 
 
 class TransportTests(unittest.TestCase):
-    def test_serial_profiles_and_loopback_hitl_connections(self):
+    def test_serial_profiles_and_loopback_connections(self):
         for profile in ('hardware', 'hitl'):
             self.assertEqual(validate_connection(profile, 'serial:///dev/ttyAMA0:921600'), '/dev/ttyAMA0')
+            self.assertEqual(validate_connection(profile, 'udpin://127.0.0.1:14540'),
+                             'udpin://127.0.0.1:14540')
         for profile, uri in [('sitl', 'udpin://127.0.0.1:14540'),
                              ('unknown', 'serial:///dev/ttyAMA0:921600'),
                              ('hardware', 'serial:///dev/ttyAMA0:0'),
-                             ('hardware', 'udpin://127.0.0.1:14540'),
+                             ('hardware', 'udpin://0.0.0.0:14540'),
+                             ('hardware', 'udpin://192.168.50.1:14540'),
+                             ('hardware', 'udpin://127.0.0.1:0'),
+                             ('hardware', 'udpin://127.0.0.1:65536'),
                              ('hitl', 'udpin://0.0.0.0:14540'),
                              ('hitl', 'udpin://192.168.0.1:14540'),
                              ('hitl', 'udpin://127.0.0.1:0'),
@@ -72,11 +77,22 @@ class TransportTests(unittest.TestCase):
         sdk.destroy.assert_called_once()
         plugins['action'].return_value.arm.assert_not_called()
 
-    def test_hardware_udp_is_rejected_before_opening_sdk(self):
+    def test_hardware_loopback_udp_uses_companion_identity_and_checks_profile(self):
         with fake_sdk() as (sdk, plugins):
-            with self.assertRaises(ValueError):
+            fc = Pixhawk('udpin://127.0.0.1:14540', 'hardware')
+        self.assertEqual(fc.profile, 'hardware')
+        self.assertEqual(fc.hitl, 0)
+        sdk.add_any_connection.assert_called_once_with('udpin://127.0.0.1:14540')
+        sdk.configuration_factory.assert_called_once_with('COMPANION')
+        plugins['action'].return_value.arm.assert_not_called()
+        plugins['param'].return_value.get_param_int.assert_called_once_with('SYS_HITL')
+
+    def test_hardware_loopback_udp_rejects_hitl_board_without_actuation(self):
+        with fake_sdk(hitl=1) as (sdk, plugins):
+            with self.assertRaisesRegex(RuntimeError, 'does not match'):
                 Pixhawk('udpin://127.0.0.1:14540', 'hardware')
-        sdk.add_any_connection.assert_not_called()
+        sdk.destroy.assert_called_once()
+        plugins['action'].return_value.arm.assert_not_called()
 
     def test_two_consoles_cannot_own_same_udp_endpoint(self):
         endpoint = 'udpin://127.0.0.1:14540'

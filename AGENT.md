@@ -7,6 +7,8 @@ các quy ước dưới đây mô tả cấu trúc và hành vi đang dùng củ
 ## Đọc trước khi thay đổi
 
 - [README.md](README.md): kiến trúc, triển khai Pi và lệnh vận hành.
+- [PI_SERVICES.md](controller/docs/PI_SERVICES.md): luồng web/MQTT, hai service,
+  IPC, ACK, log và mức độ kiểm chứng.
 - [FLIGHT_STATES.md](docs/FLIGHT_STATES.md): FSM, điều kiện chuyển trạng thái,
   ACK, timeout và các trường status.
 - [SETUP.md](simulation/docs/SETUP.md): model X500, nguồn upstream và quy trình
@@ -20,7 +22,10 @@ chiếu với mã nguồn, test và dữ liệu thực tế khi sửa lỗi.
 
 | Thư mục | Nội dung |
 |---|---|
-| `controller/pi/` | Code chạy trên Pi: console, FSM, transport, policy, validation, khóa UART |
+| `controller/pi/control/` | MQTT, kiểm tra bản tin, ACK/state/health, cấu hình có allowlist |
+| `controller/pi/flight/` | Một chủ MAVSDK/Pixhawk, FSM GPS/local NED, policy và validation |
+| `controller/pi/ipc/`, `observability/` | Socket nội bộ, JSONL log và metrics Pi |
+| `controller/pi/console.py` | Console kỹ thuật cho thử nghiệm terminal; không phải luồng web chính |
 | `controller/tests/` | Unit test phần Pi, dùng mock, không điều khiển thiết bị |
 | `controller/tools/` | Chẩn đoán Pi, build MAVSDK, phân tích ULog |
 | `controller/params/` | Overlay giao tiếp cho UAV thật |
@@ -49,12 +54,20 @@ Phần `simulation/` phải có thể chép sang PC khác mà không cần code 
   giữ HOLD tại chỗ và có thể lập A/B/độ cao/tốc độ mới từ trên không.
   Xem `controller/docs/WEB_GPS_MISSION.md`.
   Terminal dùng một bộ `pause`, `resume`, `cancel` cho cả local FLY và GPS
-  Mission, chọn theo trạng thái hiện tại. Sau khi Cancel/hoàn tất đích cũ,
+  Mission, chọn theo trạng thái hiện tại. Sau khi Cancel/hoàn tất đích cũ, hoặc tự Cancel GPS_PAUSED rồi xác nhận HOLD,
   `return-home` tạo waypoint GPS tại điểm TAKEOFF ở độ cao hiện tại, rồi HOLD; không gọi
   PX4 RTL và không tự LAND.
   Mission GPS kết thúc ở B tại độ cao được chọn; chỉ `return-height` mới
   yêu cầu về độ cao TAKEOFF tại x/y hiện tại. Sau GPS Cancel, nhận `fly x y`.
-  Các lệnh này hiện chạy qua terminal, chưa nối MQTT/web hoặc kiểm chứng bay.
+  Console vẫn cho phép thử trực tiếp các lệnh này. Service MQTT nhận sáu
+  trường trong cùng bản tin web legacy hoặc lệnh v2 và chưa được kiểm chứng
+  lại bằng chuyến bay web sau khi tách process.
+- Luồng sản phẩm chính là web → MQTT → `control/service.py` → Unix IPC →
+  `flight/service.py` → `flight/gps_mission.py`. Flight service là chủ MAVSDK duy
+  nhất; callback MQTT không gọi MAVSDK. `fly x y` chỉ là công cụ local-NED thử
+  nghiệm trong console và không được thêm vào API web.
+- Console không kết nối MQTT. Payload web legacy và JSON v2 đều phải đi qua
+  Control Service rồi IPC; không khôi phục nhánh console vừa MQTT vừa MAVSDK.
 - TAKEOFF/FLY khóa đích đang thực hiện. LAND/DISARM đi qua khóa đích khi
   console xử lý lệnh; không tuyên bố ưu tiên này là bảo đảm thời gian thực.
 - Một lệnh `disarm` hiện dùng force-stop cả trên đất và trên không, nội bộ
@@ -70,10 +83,10 @@ Phần `simulation/` phải có thể chép sang PC khác mà không cần code 
 
 ## Tham số, model và thiết bị
 
-- Console trên PC dùng profile `hitl` với `udpin://127.0.0.1:14540` qua
+- Flight service trên PC dùng profile `hitl` với `udpin://127.0.0.1:14540` qua
   bridge Gazebo giữ USB. Profile `hardware` trên Pi cũng nhận UDP loopback
   khi MAVLink Router giữ USB Pixhawk và chuyển tiếp tới QGC trên PC.
-  Không chạy console và observer cùng chiếm UDP 14540.
+  Không chạy console, flight service và observer cùng chiếm UDP 14540.
 - Trước reset/nạp tham số, bản sao phải được xác minh giá trị và kiểu,
   không chỉ đếm đủ PARAM_VALUE. Với frame MAVLink 2, không giả định
   `get_payload()` của parser v1 bỏ đúng header; kiểm tra bytes từ frame

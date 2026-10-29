@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Console for serial Pixhawk control or local UDP through a MAVLink bridge."""
+"""Engineering console for local NED tests; web missions use control/flight services."""
 import argparse
 import faulthandler
 from contextlib import ExitStack
@@ -12,17 +12,22 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from deployment import validate_connection
-from serial_lock import serial_ownership, udp_ownership
-from gps_mission import GpsMissionControl, GpsLimits
-from flight_policy import FlightPolicy
+
+PI_DIR = Path(__file__).resolve().parent
+if str(PI_DIR) not in sys.path:
+    sys.path.insert(0, str(PI_DIR))
+
+from flight.deployment import validate_connection
+from flight.serial_lock import serial_ownership, udp_ownership
+from flight.gps_mission import GpsMissionControl, GpsLimits
+from flight.flight_policy import FlightPolicy
 
 HELP = '''arm         ARM only on ground; motors may spin; no Offboard or climb
 takeoff     Start OFFBOARD climb; accepts separate ARM or arms from IDLE
 fly x y     Leave HOLD and fly to absolute local NED x/y (also: fly x,y)
 land        Request PX4 LAND
-return-home Return to captured takeoff GPS at current height, then HOLD
-return-height Move vertically to TAKEOFF height at current x/y, then HOLD
+return-home Return to takeoff GPS at current height, then HOLD; paused GPS is cancelled first; requires height >= MIS_TAKEOFF_ALT
+return-height Move vertically to TAKEOFF height at current x/y, then HOLD; paused GPS is cancelled first
 disarm      Force motors off on ground OR in flight; vehicle may fall
 gps-plan A_lat A_lon B_lat B_lon height speed  Stage two GPS waypoints
 gps-start   On ground: TAKEOFF/HOLD then A then B; in HOLD: start A then B
@@ -93,7 +98,7 @@ def execute(fc, line, output=print):
     else:
         if command == 'gps-plan':
             output(json.dumps(fc.gps_plan(*xy), indent=2, allow_nan=False))
-            output('Plan staged on Pi only. gps-start is required to upload/start it.')
+            output('Plan staged in this console only. gps-start is required to upload/start it.')
         elif command == 'gps-start':
             getattr(fc, command.replace('-', '_'))()
             output('GPS request sent; check status for PX4 mode/mission confirmation.')
@@ -121,12 +126,12 @@ def execute(fc, line, output=print):
             output('LAND acknowledged. Connection remains open; check land_mode_confirmed, '
                    'then ON_GROUND and armed=false. Do not exit yet.')
         elif command == 'return-home':
-            output('Return request sent. Wait for phase=HOME_COMPLETE, PX4 HOLD and '
-                   'return_position_confirmed=true; use land separately.')
+            output('Return request accepted for HOLD; home waypoint starts after HOLD mode confirmation. '
+                   'Wait for phase=HOME_COMPLETE and return_position_confirmed=true; use land separately.')
         elif command == 'return-height':
             output('Height request processed. Wait for phase=HOLD and check '
                    'height_above_launch_m; use land separately.')
-        else:
+        elif command not in {'gps-plan', 'gps-start', 'pause', 'resume', 'cancel'}:
             output('Request sent. Observe PX4/Gazebo; this is not confirmation of arrival.')
     return True
 

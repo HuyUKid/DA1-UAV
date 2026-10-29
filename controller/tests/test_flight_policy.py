@@ -4,7 +4,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "pi"))
 
 import unittest
 from dataclasses import replace
-from flight_policy import ArrivalMonitor, FlightPolicy
+from flight.flight_policy import ArrivalMonitor, FlightPolicy
 
 
 class ArrivalTests(unittest.TestCase):

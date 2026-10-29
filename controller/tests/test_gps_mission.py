@@ -8,8 +8,8 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'pi'))
-from flight_policy import ArrivalMonitor, FlightPolicy
-from gps_mission import GpsMissionControl, GpsLimits, distance_m
+from flight.flight_policy import ArrivalMonitor, FlightPolicy
+from flight.gps_mission import GpsMissionControl, GpsLimits, distance_m
 from console import execute
 
 
@@ -19,7 +19,7 @@ class GpsMissionTests(unittest.TestCase):
         clock = patch('time.monotonic', side_effect=lambda: self.now)
         clock.start()
         self.addCleanup(clock.stop)
-        sleep = patch('offboard_control.time.sleep', side_effect=self.advance)
+        sleep = patch('flight.offboard_control.time.sleep', side_effect=self.advance)
         sleep.start()
         self.addCleanup(sleep.stop)
         fc = GpsMissionControl.__new__(GpsMissionControl)
@@ -44,7 +44,9 @@ class GpsMissionTests(unittest.TestCase):
         fc.home_started_at = None
         fc.px4_xy_vel_max = 0.5
         fc.mission = Mock()
-        fc.MissionItem = lambda **kw: SimpleNamespace(**kw)
+        fc.MissionItem = Mock(side_effect=lambda **kw: SimpleNamespace(**kw))
+        fc.MissionItem.CameraAction.NONE = 0
+        fc.MissionItem.VehicleAction.NONE = 0
         fc.MissionPlan = lambda **kw: SimpleNamespace(**kw)
         fc.motor_stop_kind = None
         fc.paused_target = None
@@ -128,6 +130,15 @@ class GpsMissionTests(unittest.TestCase):
         self.assertEqual(self.fc.phase, 'GPS_CANCELLED')
         self.advance(0.1)
 
+    def test_mission_item_has_native_binding_fields(self):
+        item = self.fc._mission_item(10.0, 106.0, 3.0, 0.5)
+        for value in vars(item).values():
+            self.assertIsNotNone(value)
+        self.assertTrue(math.isnan(item.gimbal_pitch_deg))
+        self.assertEqual(item.camera_action, 0)
+        self.assertEqual(item.vehicle_action, 0)
+        self.assertEqual(item.camera_photo_interval_s, 1.0)
+
     def test_plan_only_stages_and_rejects_bad_inputs(self):
         with self.assertRaises(ValueError):
             self.fc.gps_resume()
@@ -144,6 +155,31 @@ class GpsMissionTests(unittest.TestCase):
         for bad in (math.nan, math.inf, 15.0):
             with self.subTest(speed=bad), self.assertRaises(ValueError):
                 self.fc.gps_plan(10, 106.00002, 10, 106.00005, 2, bad)
+
+    def test_same_current_A_and_B_is_a_single_vertical_only_waypoint(self):
+        plan = self.fc.gps_plan(10.0, 106.0, 10.0, 106.0, 2.5, 0.4)
+        self.assertTrue(plan['vertical_only'])
+        self.assertEqual(plan['approach_m'], 0.0)
+        self.assertEqual(plan['leg_m'], 0.0)
+        self.fc.gps_start()
+        self.finish_takeoff('GPS_STARTING')
+        uploaded = self.fc.mission.upload_mission.call_args.args[0].mission_items
+        self.assertEqual(len(uploaded), 1)
+        self.assertEqual(uploaded[0].latitude_deg, 10.0)
+        self.assertEqual(uploaded[0].longitude_deg, 106.0)
+        self.assertEqual(uploaded[0].relative_altitude_m, 2.5)
+
+    def test_rounded_same_A_and_B_within_freshness_radius_pins_current_gps(self):
+        plan = self.fc.gps_plan(10.0, 106.00003, 10.0, 106.00003, 2.5, 0.4)
+        self.assertTrue(plan['vertical_only'])
+        self.assertEqual(plan['start_lat'], 10.0)
+        self.assertEqual(plan['start_lon'], 106.0)
+        self.assertEqual(plan['end_lat'], 10.0)
+        self.assertEqual(plan['end_lon'], 106.0)
+
+    def test_same_A_and_B_far_from_vehicle_is_not_mistaken_for_vertical_only(self):
+        with self.assertRaisesRegex(ValueError, 'distance limit'):
+            self.fc.gps_plan(10.0, 106.001, 10.0, 106.001, 2.5, 0.4)
 
     def test_ground_A_is_rechecked_before_takeoff(self):
         self.plan()
@@ -291,12 +327,27 @@ class GpsMissionTests(unittest.TestCase):
         self.fc.gps_start()
         self.assertEqual(self.fc.phase, 'GPS_STARTING')
         self.assertEqual(self.fc.mission.upload_mission.call_count, 2)
+        self.assertEqual(self.fc.mission.set_current_mission_item.call_count, 2)
+        self.fc.mission.set_current_mission_item.assert_called_with(0)
         items = self.fc.mission.upload_mission.call_args.args[0].mission_items
         self.assertAlmostEqual(items[0].longitude_deg, 106.00005)
         self.assertAlmostEqual(items[1].longitude_deg, 106.00007)
         self.assertAlmostEqual(items[1].relative_altitude_m, 3.0)
         self.assertAlmostEqual(items[1].speed_m_s, 0.3)
         self.fc.action.arm.assert_called_once()  # Initial TAKEOFF only.
+
+    def test_in_air_replacement_does_not_start_if_item_zero_is_denied(self):
+        self.running()
+        self.cancel_running()
+        self.fc.gps_plan(10.0, 106.00002, 10.0, 106.00005, 2.5, 0.4)
+        self.fc.mission.start_mission.reset_mock()
+        self.fc.mission.set_current_mission_item.side_effect = RuntimeError('DENIED')
+        with self.assertRaisesRegex(RuntimeError, 'DENIED'):
+            self.fc.gps_start()
+        self.assertEqual(self.fc.phase, 'GPS_UNCONFIRMED')
+        self.assertIn('New GPS mission was not ready', self.fc.last_error)
+        self.fc.mission.start_mission.assert_not_called()
+        self.fc.action.land.assert_not_called()
 
     def test_cancel_waits_for_gps_sample_after_hold_before_clearing(self):
         self.running()
@@ -420,6 +471,8 @@ class GpsMissionTests(unittest.TestCase):
         self.assertEqual(self.fc.phase, 'GPS_STARTING')
         self.fc.mission.clear_mission.assert_called_once()
         self.assertEqual(self.fc.mission.upload_mission.call_count, 2)
+        self.assertEqual(self.fc.mission.set_current_mission_item.call_count, 2)
+        self.fc.mission.set_current_mission_item.assert_called_with(0)
         items = self.fc.mission.upload_mission.call_args.args[0].mission_items
         self.assertEqual(len(items), 1)
         self.assertAlmostEqual(items[0].latitude_deg, 10.0)
@@ -460,6 +513,83 @@ class GpsMissionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'saved launch GPS'):
             self.fc.return_home()
 
+    def test_return_home_from_paused_gps_cancels_before_replacement(self):
+        self.running()
+        self.fc.pause()
+        self.put('flight_mode', 'HOLD')
+        self.fc.refresh()
+        self.assertEqual(self.fc.phase, 'GPS_PAUSED')
+        self.fc.return_home()
+        self.assertEqual(self.fc.phase, 'HOME_HOLD_REQUESTED')
+        self.assertAlmostEqual(self.fc.home_return_target['speed_m_s'], 0.4)
+        self.assertEqual(self.fc.mission.clear_mission.call_count, 1)
+        self.put('flight_mode', 'HOLD')
+        self.fc.refresh()
+        self.assertEqual(self.fc.mission.set_current_mission_item.call_count, 2)
+        self.fc.mission.set_current_mission_item.assert_called_with(0)
+        self.assertEqual(self.fc.phase, 'GPS_STARTING')
+
+    def test_return_home_does_not_start_when_new_mission_index_is_denied(self):
+        self.running()
+        self.cancel_running()
+        self.fc.mission.start_mission.reset_mock()
+        self.fc.mission.set_current_mission_item.side_effect = RuntimeError('DENIED')
+        self.fc.return_home()
+        self.put('flight_mode', 'HOLD')
+        self.fc.refresh()
+        self.assertEqual(self.fc.phase, 'GPS_UNCONFIRMED')
+        self.assertIn('DENIED', self.fc.last_error)
+        self.fc.mission.start_mission.assert_not_called()
+        self.assertFalse(self.fc.status()['gps_mission']['return_position_confirmed'])
+
+    def test_return_home_from_paused_waits_for_fresh_cancel_position(self):
+        self.running()
+        self.fc.pause()
+        self.put('flight_mode', 'HOLD')
+        self.fc.refresh()
+        value, _ = self.fc.cache['position']
+        self.fc.cache['position'] = (value, self.now - 0.2)
+        with self.assertRaisesRegex(RuntimeError, 'cancel is pending'):
+            self.fc.return_home()
+        self.assertEqual(self.fc.phase, 'GPS_CANCEL_REQUESTED')
+        self.assertEqual(self.fc.mission.upload_mission.call_count, 1)
+
+    def test_return_home_paused_below_min_keeps_resumable_mission(self):
+        self.running()
+        self.fc.pause()
+        self.put('flight_mode', 'HOLD')
+        self.fc.refresh()
+        self.fc.param.get_param_float.return_value = 2.5
+        with self.assertRaisesRegex(ValueError, 'MIS_TAKEOFF_ALT'):
+            self.fc.return_home()
+        self.assertEqual(self.fc.phase, 'GPS_PAUSED')
+        self.fc.mission.clear_mission.assert_not_called()
+        self.assertTrue(self.fc.gps_mission_stored)
+
+    def test_return_home_rejects_below_mission_takeoff_alt_before_hold(self):
+        self.ready()
+        self.fc.action.hold.reset_mock()
+        self.fc.param.get_param_float.return_value = 2.5
+        with self.assertRaisesRegex(ValueError, 'MIS_TAKEOFF_ALT 2.50 m'):
+            self.fc.return_home()
+        self.assertEqual(self.fc.phase, 'HOLD')
+        self.fc.action.hold.assert_not_called()
+        self.fc.mission.upload_mission.assert_not_called()
+
+    def test_return_home_clamps_small_estimator_error_to_mission_minimum(self):
+        self.ready()
+        self.fc.param.get_param_float.return_value = 2.5
+        self.put('position', dict(latitude_deg=10.0, longitude_deg=106.00002,
+                                  absolute_altitude_m=102.49,
+                                  relative_altitude_m=2.49))
+        self.fc.return_home()
+        self.assertEqual(self.fc.home_return_target['request_relative_altitude_m'], 2.5)
+        self.put('flight_mode', 'HOLD')
+        self.fc.refresh()
+        item = self.fc.mission.upload_mission.call_args.args[0].mission_items[0]
+        self.assertEqual(item.relative_altitude_m, 2.5)
+        self.fc.action.land.assert_not_called()
+
     def test_return_home_from_local_fly_uses_launch_gps_and_current_height(self):
         self.ready()
         self.fc.fly(1, 2)
@@ -499,6 +629,46 @@ class GpsMissionTests(unittest.TestCase):
         self.assertAlmostEqual(self.fc.target['down_m'], 2.731)
         self.assertEqual(self.fc.target['north_m'], 1.0)
         self.fc.make_offboard.assert_called()  # Recreate stream after PX4 Mission.
+
+    def test_return_height_from_paused_gps_cancels_and_moves_vertically(self):
+        self.running()
+        self.put('local_ned', dict(north_m=1.0, east_m=2.0, down_m=2.731))
+        self.put('position', dict(latitude_deg=10.0, longitude_deg=106.00004,
+                                  absolute_altitude_m=102.5, relative_altitude_m=2.5))
+        self.fc.pause()
+        self.put('flight_mode', 'HOLD')
+        self.fc.refresh()
+        self.assertEqual(self.fc.phase, 'GPS_PAUSED')
+        self.fc.return_height()
+        self.assertEqual(self.fc.phase, 'FLY')
+        self.assertAlmostEqual(self.fc.target['down_m'], 3.231)
+        self.assertAlmostEqual(self.fc.target['north_m'], 1.0)
+        self.assertAlmostEqual(self.fc.target['east_m'], 2.0)
+        self.assertEqual(self.fc.mission.clear_mission.call_count, 1)
+        self.fc.action.land.assert_not_called()
+
+    def test_return_height_paused_invalid_hold_height_keeps_mission(self):
+        self.running()
+        self.fc.pause()
+        self.put('flight_mode', 'HOLD')
+        self.fc.refresh()
+        self.fc.nav_min_ltr_alt = 3.0
+        with self.assertRaisesRegex(ValueError, 'NAV_MIN_LTR_ALT'):
+            self.fc.return_height()
+        self.assertEqual(self.fc.phase, 'GPS_PAUSED')
+        self.fc.mission.clear_mission.assert_not_called()
+
+    def test_return_height_from_cancelled_gps_keeps_current_xy(self):
+        self.running()
+        self.put('local_ned', dict(north_m=1.0, east_m=2.0, down_m=2.731))
+        self.put('position', dict(latitude_deg=10.0, longitude_deg=106.00004,
+                                  absolute_altitude_m=102.5, relative_altitude_m=2.5))
+        self.cancel_running()
+        self.fc.return_height()
+        self.assertEqual(self.fc.phase, 'FLY')
+        self.assertAlmostEqual(self.fc.target['north_m'], 1.0)
+        self.assertAlmostEqual(self.fc.target['east_m'], 2.0)
+        self.assertAlmostEqual(self.fc.target['down_m'], 3.231)
 
     def test_return_height_from_completed_B_then_hold_at_takeoff_height(self):
         self.running()

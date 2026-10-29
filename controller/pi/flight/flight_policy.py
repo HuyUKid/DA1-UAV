@@ -1,7 +1,7 @@
 """Arrival supervision only. PX4 retains all flight-control loops."""
 from dataclasses import dataclass
 import math
-from validation import number
+from flight.validation import number
 
 
 @dataclass(frozen=True)

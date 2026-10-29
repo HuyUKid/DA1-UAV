@@ -1,0 +1,20 @@
+[Unit]
+Description=UAV flight service (sole MAVSDK/Pixhawk owner)
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/uav/current/controller
+EnvironmentFile=/etc/uav/uav.env
+RuntimeDirectory=uav
+RuntimeDirectoryPreserve=yes
+StateDirectory=uav
+ExecStart=/home/pi/uav/current/controller/.venv/bin/python pi/flight/service.py --profile ${UAV_PROFILE} --connection ${UAV_CONNECTION} --height ${UAV_HEIGHT} --gps-max-height ${UAV_GPS_MAX_HEIGHT} --gps-max-leg ${UAV_GPS_MAX_LEG} --gps-max-speed ${UAV_GPS_MAX_SPEED} --socket /run/uav/flight.sock --log-dir /var/lib/uav/logs
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

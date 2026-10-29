@@ -1,117 +1,103 @@
-title UAV local NED — Pi giám sát FSM, Pixhawk điều khiển
+title UAV Web GPS A→B — Control Service và Flight Service
 
 participant Người_vận_hành
-participant Pi
-participant PX4
+participant Web_Backend
+participant MQTT_Broker
+participant Control_Service
+participant IPC_Unix_Socket
+participant Flight_Service
+participant Pixhawk_PX4
+participant Log_JSONL
 
-note over Pi,PX4: PX4 chạy EKF và mọi vòng điều khiển position/velocity/attitude/rate/motor.
-note over Pi: Pi quản lý trạng thái, khóa mục tiêu và giám sát vị trí/yaw + dwell. Không PID, không tạo setpoint vận tốc.
-note over Pi,PX4: Offboard chuẩn không phát ACK tới đích; target_reached là kết quả giám sát Pi, không phải PX4 waypoint ACK.
-note over Pi,PX4: Console dùng local NED: x Bắc/y Đông theo mét; z hướng xuống.
+note over Control_Service,Flight_Service: Hai process độc lập. Control không mở MAVSDK; Flight là chủ duy nhất của MAVSDK/MAVLink.
+note over Flight_Service,Pixhawk_PX4: PX4 chạy EKF và mọi vòng điều khiển bay. Pi quản lý FSM, mục tiêu và giám sát telemetry.
 
-Pi->>PX4: Kết nối, đọc SYS_HITL và NAV_MIN_LTR_ALT
-PX4-->>Pi: Telemetry mới, health, mode, armed, landed_state
+Flight_Service->>Pixhawk_PX4: Kết nối MAVSDK, đọc SYS_HITL và telemetry
+Pixhawk_PX4-->>Flight_Service: mode, armed, landed, health, position
+Flight_Service->>IPC_Unix_Socket: Mở /run/uav/flight.sock hoặc /tmp/uav-flight.sock
+Control_Service->>MQTT_Broker: Kết nối TLS, subscribe command, đăng Last Will
+Control_Service->>Log_JSONL: SERVICE_STARTED + MQTT_CONNECTED
 
-alt Chỉ thử motor trên đất, đã tháo cánh
-    Người_vận_hành->>Pi: arm
-    Pi->>Pi: Kiểm tra IDLE/disarmed/ON_GROUND, health và dữ liệu mới
-    Pi->>PX4: ARM, không tạo Offboard/setpoint cất cánh
-    PX4-->>Pi: ACK; sau đó telemetry armed=true
-    Pi->>Pi: ARMED chỉ khi có trạng thái mới xác nhận
-    Người_vận_hành->>Pi: disarm
-    Pi->>PX4: Dừng motor cưỡng bức, gửi trước mọi teardown
-    PX4-->>Pi: ACK; sau đó armed=false
-    Pi->>Pi: IDLE khi armed=false + ON_GROUND mới
-    note over Pi,PX4: Chỉ một lệnh DISARM cả dưới đất/trên không, nội bộ API force-stop.
-else TAKEOFF
-    Người_vận_hành->>Pi: takeoff
-    Pi->>Pi: Chụp local NED; giữ x/y; z_target=z_launch-height
-    Pi->>PX4: Prestream >1 s, ARM nếu chưa ARM, OFFBOARD
-    PX4-->>Pi: ACK và telemetry ARMED/OFFBOARD mới
-    Pi->>Pi: TAKEOFF; khóa đích, không coi ACK là đã lên cao
-end
+Người_vận_hành->>Web_Backend: Gửi nhiệm vụ và cất cánh
+Web_Backend->>MQTT_Broker: gps_start JSON v2 hoặc payload sáu trường legacy
+MQTT_Broker->>Control_Service: MQTT command, Retain phải OFF
+Control_Service->>Control_Service: Xếp hàng; kiểm tra schema, ID, thời hạn, tọa độ và giới hạn payload
 
-loop Khi TAKEOFF hoặc FLY
-    PX4->>PX4: EKF, tính sai lệch, điều khiển và giữ đích
-    Pi->>PX4: MAVSDK duy trì phát cùng position setpoint + yaw
-    PX4-->>Pi: Position, yaw, mode, armed, landed_state
-    alt Mất kết nối hoặc PX4/phi công đổi mode ngoài ý muốn
-        Pi->>Pi: Chốt EXTERNAL, ngừng stream; không tự ARM/restart khi nối lại
-    else Dữ liệu cũ/NaN/Inf/gap quá lớn hoặc ra ngoài ngưỡng
-        Pi->>Pi: Xóa dwell; giữ khóa đích
-    else IN_AIR, OFFBOARD, vị trí/yaw trong ngưỡng
-        Pi->>Pi: SETTLING, tích lũy dwell theo các mẫu mới
-        alt Đủ dwell
-            Pi->>PX4: Action.hold(), chuyển native PX4 HOLD
-            PX4-->>Pi: ACK; sau đó telemetry HOLD mới
-            Pi->>Pi: HOLD; ghi target_reached; TAKEOFF hoàn tất nếu đúng thao tác
-        end
-    end
-    alt Target quá hạn
-        Pi->>PX4: Yêu cầu HOLD, không báo hoàn thành đích
+alt Payload/ID không hợp lệ, hết hạn, retained hoặc trùng ID gần đây
+    Control_Service->>Log_JSONL: COMMAND_REJECTED + lý do
+    Control_Service->>MQTT_Broker: ACK rejected
+    MQTT_Broker-->>Web_Backend: rejected
+else Lệnh hợp lệ
+    Control_Service->>Log_JSONL: COMMAND_RECEIVED
+    Control_Service->>MQTT_Broker: ACK received
+    Control_Service->>IPC_Unix_Socket: command gps_start
+    IPC_Unix_Socket->>Flight_Service: request JSON nội bộ
+    Flight_Service->>Flight_Service: gps_plan(A, B, height, speed)
+
+    alt Điều kiện flight không đạt
+        Flight_Service-->>IPC_Unix_Socket: ok=false + lý do
+        IPC_Unix_Socket-->>Control_Service: rejected response
+        Control_Service->>Log_JSONL: COMMAND_REJECTED
+        Control_Service->>MQTT_Broker: ACK rejected
+    else Kế hoạch được chấp nhận
+        Flight_Service->>Flight_Service: gps_start()
+        Flight_Service->>Pixhawk_PX4: TAKEOFF/OFFBOARD hoặc PX4 Mission theo FSM
+        Flight_Service->>Log_JSONL: COMMAND_ACCEPTED + trạng thái sau lệnh
+        Flight_Service-->>IPC_Unix_Socket: ok=true + plan/status
+        IPC_Unix_Socket-->>Control_Service: accepted response
+        Control_Service->>MQTT_Broker: ACK accepted
+        note over Web_Backend,Pixhawk_PX4: accepted chỉ xác nhận yêu cầu đã được nhận xử lý; chưa xác nhận UAV đã tới A/B.
     end
 end
 
-note over Pi,PX4: HOLD vô thời hạn đến lệnh mới. NAV_MIN_LTR_ALT có thể buộc nâng cao; Pi chặn nguy cơ nâng không mong muốn và yêu cầu LAND.
-
-loop Trong HOLD
-    PX4->>PX4: Phanh và giữ vị trí bằng native Hold; không cần setpoint Offboard
-    Người_vận_hành->>Pi: Lệnh mới
-    alt Chỉ nhập fly hoặc x y đơn lẻ
-        Pi-->>Người_vận_hành: Từ chối; cần lệnh đầy đủ fly x y
-    else fly x y
-        Pi->>Pi: Yêu cầu TAKEOFF hoàn tất, mode HOLD mới, health tốt
-        Pi->>PX4: Setpoint mới, prestream, OFFBOARD; không ARM lại
-        Pi->>Pi: FLY; khóa thay đích đến HOLD tiếp theo
-    end
+loop Giám sát trong khi bay
+    Pixhawk_PX4-->>Flight_Service: telemetry mới và tiến độ Mission
+    Flight_Service->>Flight_Service: refresh FSM, kiểm tra phase/mode/armed/landed
+    Flight_Service->>Log_JSONL: phase/state thay đổi và DEBUG nếu được bật
+    Control_Service->>IPC_Unix_Socket: status định kỳ
+    IPC_Unix_Socket->>Flight_Service: status request
+    Flight_Service-->>Control_Service: flight status
+    Control_Service->>MQTT_Broker: retained /v2/state
+    Control_Service->>MQTT_Broker: /v2/event khi trạng thái thay đổi
+    Control_Service->>MQTT_Broker: retained /v2/health
+    MQTT_Broker-->>Web_Backend: state, event, health
 end
 
-alt Pause/Resume trong local FLY
-    Người_vận_hành->>Pi: pause
-    Pi->>Pi: Lưu đích x/y/z đang bay
-    Pi->>PX4: Action.hold()
-    PX4-->>Pi: Mode HOLD mới
-    Pi->>Pi: PAUSED; không tự Resume
-    Người_vận_hành->>Pi: resume
-    Pi->>PX4: Gửi lại đúng đích cũ, prestream, OFFBOARD
-    PX4-->>Pi: Mode OFFBOARD mới; tiếp tục FLY, không ARM lại
-else Cancel trong local FLY/PAUSED
-    Người_vận_hành->>Pi: cancel
-    Pi->>PX4: Action.hold(), chờ mode HOLD mới
-    PX4-->>Pi: Vị trí x/y/z mới sau HOLD
-    Pi->>Pi: Bỏ đích cũ; xác nhận Cancel tại vị trí/độ cao hiện tại
-else Về độ cao TAKEOFF theo lệnh riêng
-    Người_vận_hành->>Pi: return-height sau HOLD
-    Pi->>PX4: OFFBOARD giữ x/y hiện tại, z về mốc TAKEOFF
-    PX4-->>Pi: Độ cao trong ngưỡng rồi HOLD
+alt Mission tới B
+    Pixhawk_PX4-->>Flight_Service: mission finished + HOLD telemetry
+    Flight_Service->>Flight_Service: GPS_COMPLETE khi telemetry xác nhận
+    Control_Service->>MQTT_Broker: state phase=GPS_COMPLETE
+    note over Web_Backend,Control_Service: Hiện chưa publish ACK completed; web phải đọc state/telemetry.
+else Mission lỗi sau khi đã bắt đầu
+    Flight_Service->>Log_JSONL: lỗi/phase thực tế
+    Control_Service->>MQTT_Broker: state/event có lỗi
+    note over Web_Backend,Control_Service: Hiện chưa publish ACK failed riêng.
 end
 
-alt LAND, ưu tiên qua khóa đích khi console nhận lệnh
-    Người_vận_hành->>Pi: land
-    Pi->>Pi: Ghi bối cảnh: phase/mode/armed/landed_state/plugin
-    Pi->>PX4: MAV_CMD_NAV_LAND trước mọi teardown, giữ SDK và plugin sống
-    PX4-->>Pi: ACK hoặc từ chối/timeout
-    note over Pi,PX4: Cùng hàm gửi khi ARM trên đất và khi bay; trạng thái thực và tải khác nhau, không bảo đảm bài thử trên đất tái hiện lỗi khi bay.
-    PX4->>PX4: Khi bay và nhận LAND, điều khiển hạ cánh, nhận biết chạm đất
-    PX4-->>Pi: LAND, ON_GROUND, armed=false mới
-    Pi->>Pi: IDLE; giữ phiên và plugin đến exit/lần TAKEOFF tường minh tiếp theo
-else DISARM, ưu tiên qua khóa đích khi console nhận lệnh
-    Người_vận_hành->>Pi: disarm
-    Pi->>PX4: Force motor stop; không chờ điều kiện mặt đất/vị trí
-    PX4-->>Pi: ACK; sau đó telemetry armed=false
-    note over Người_vận_hành,PX4: DISARM trên không có thể làm UAV rơi; khác với LAND.
-else Quay về điểm cất cánh rồi HOLD
-    Người_vận_hành->>Pi: return-home
-    note over Người_vận_hành,Pi: Đích đang chạy phải Cancel và chờ HOLD trước return-home.
-    Pi->>PX4: Action.hold(), chờ HOLD mới
-    Pi->>PX4: Upload Mission một waypoint tại GPS chụp lúc TAKEOFF ở độ cao hiện tại
-    PX4->>PX4: Dẫn đường về waypoint, không có lệnh LAND
-    PX4-->>Pi: Mission finished; Pi yêu cầu HOLD nếu còn MISSION
-    PX4-->>Pi: HOLD + GPS/cao độ mới
-    Pi->>Pi: HOME_COMPLETE khi trong ngưỡng; chờ land riêng
-    note over Pi,PX4: Đây là Mission quay về, không phải PX4 RTL; ACK upload/start chưa xác nhận đã về.
+alt Pause / Resume / Cancel / Return Home / Return Height
+    Web_Backend->>MQTT_Broker: command v2 có command_id mới và hạn dùng
+    MQTT_Broker->>Control_Service: command
+    Control_Service->>IPC_Unix_Socket: validated command
+    IPC_Unix_Socket->>Flight_Service: request
+    Flight_Service->>Pixhawk_PX4: Action HOLD, Mission hoặc Offboard tương ứng
+    Pixhawk_PX4-->>Flight_Service: ACK rồi telemetry mode/position mới
+    Flight_Service-->>Control_Service: accepted hoặc rejected
+    Control_Service->>MQTT_Broker: ACK + state/event
+else LAND
+    Web_Backend->>MQTT_Broker: land command v2
+    Control_Service->>IPC_Unix_Socket: land
+    Flight_Service->>Pixhawk_PX4: MAV_CMD_NAV_LAND
+    Pixhawk_PX4-->>Flight_Service: ACK, LAND, ON_GROUND, armed=false theo thời gian
+    Control_Service->>MQTT_Broker: ACK accepted rồi state cập nhật
+    note over Người_vận_hành,Pixhawk_PX4: Chờ ON_GROUND và armed=false; ACK accepted không phải xác nhận đã chạm đất.
 end
 
-note over Pi,PX4: HOLD bị từ chối hoặc quá hạn xác nhận: yêu cầu LAND một lần, ghi lỗi; không retry/tự giành lại quyền.
-note over PX4: Mất liên kết thật, pin, geofence và emergency do PX4 xử lý theo failsafe cấu hình trên bo.
-note over Pi: Log/fault log/boot ID và diagnose_pi dùng điều tra Pi đèn đỏ/mất Wi-Fi. Không kết luận phần cứng tốt từ unit test.
+alt MQTT tạm mất
+    MQTT_Broker--xControl_Service: Mất liên kết
+    Control_Service->>Log_JSONL: MQTT_DISCONNECTED
+    Flight_Service->>Pixhawk_PX4: Tiếp tục giám sát trạng thái PX4 độc lập MQTT
+    note over Control_Service,Web_Backend: Chưa có outbox phát lại ACK/event sau khi nối lại.
+end
+
+note over Người_vận_hành,Log_JSONL: console.py là công cụ local NED riêng, không kết nối MQTT và không chạy cùng Flight Service trên cùng UART/UDP.
+note over Control_Service,Web_Backend: Camera, OTA, flight_id, ACK executing/completed/failed và QGC STATUSTEXT bridge chưa được triển khai đầy đủ.

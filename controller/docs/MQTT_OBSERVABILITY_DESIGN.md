@@ -1,173 +1,114 @@
-# Thiết kế MQTT, log và giám sát Pi/Pixhawk (đề xuất)
+# MQTT, nhật ký và sức khỏe thiết bị
 
-Tài liệu này cụ thể hóa bản nháp ngày 28/10/2026. Đây là **thiết kế**, chưa phải
-chức năng đã triển khai. Hiện Pi điều khiển Pixhawk qua `pi/console.py` và
-`GpsMissionControl`; web chưa gửi lệnh vào phiên này. Không thử publish lệnh bay
-trên broker thật khi chưa có adapter và quy trình kiểm thử HITL.
+Trang này phân biệt phần đã có trong code với các mục của bản nháp chưa
+triển khai. Sơ đồ và lệnh chạy: [PI_SERVICES.md](PI_SERVICES.md).
 
-## 1. Ranh giới trách nhiệm
+## Đường dữ liệu hiện tại
 
-```text
-Web/backend ── MQTT broker ── control service (Pi)
-                                     │ IPC: lệnh + ACK + trạng thái
-                                     ▼
-                              flight service (Pi) ── MAVSDK ── Pixhawk
-                                     │
-                              log sự kiện/telemetry (Pi)
+| Thành phần | Code hiện có | Giới hạn |
+|---|---|---|
+| Kết nối broker | `control/service.py`: TLS theo CA hệ thống, subscribe legacy/v2, Last Will, ACK/state/health/event/availability | Cần xác nhận ACL và topic với backend |
+| Lệnh web | `control/protocol.py`: sáu trường legacy hoặc JSON v2 có ID và hạn dùng | Legacy cần `--allow-legacy-start`, không có ID/hạn dùng từ backend |
+| Quyền bay | `flight/service.py` qua Unix socket cục bộ; một chủ MAVSDK | Chưa smoke test hai service trong HITL |
+| Log | `observability/event_log.py`: JSONL theo phiên service, rotate theo kích thước, không tự xóa; `observability/export_logs.py` gộp thành CSV/JSONL | Chưa có một file/flight ID chung ngay lúc chạy, chưa đảm bảo dung lượng tối đa |
+| Pi health | `observability/metrics.py` và Control Service: CPU, load, RAM/swap, nhiệt độ, disk, uptime, boot ID, RSS tiến trình, MQTT connected/RX/TX/reconnect và độ dài hàng lệnh | Chưa có undervoltage, Wi-Fi RSSI, camera |
+| Pixhawk state | `GpsMissionControl.status()`: mode, armed, landed, position và tuổi telemetry | Chưa thu đầy đủ pin, GPS quality, StatusText/failsafe |
+| Runtime config | `config/defaults.json`, `config/schema.json`, `control/config_manager.py`: interval state/health; lệnh `debug_set` bật DEBUG có hạn | Chưa kiểm thử tải log trên Pi |
+| Camera/OTA | `camera_status` và `ota_status` trả `available=false` | Không có camera adapter hay cập nhật từ xa |
+
+Control service tiếp tục giữ MQTT khi flight service không phản hồi và
+publish `state.online=false`. Hai tiến trình lưu log riêng trên Pi; log
+vẫn ghi khi MQTT mất kết nối. Không có outbox phát lại ACK/event sau mất
+mạng. MQTT callback chỉ xếp bản tin vào hàng; luồng chính mới gửi IPC.
+
+## Topic và ý nghĩa ACK
+
+| Topic | Chiều | Nội dung | Retain |
+|---|---|---|---|
+| `lac/<id>/control` | backend → Pi | Sáu trường legacy trong một payload | Phải OFF |
+| `lac/<id>/v2/command` | backend → Pi | JSON v2 có ID/hạn dùng | Phải OFF |
+| `lac/<id>/v2/ack` | Pi → backend | `received`, `accepted` hoặc `rejected` | OFF |
+| `lac/<id>/v2/state` | Pi → backend | Snapshot trạng thái flight, thời điểm quan sát | ON |
+| `lac/<id>/v2/health` | Pi → backend | Snapshot Pi health | ON |
+| `lac/<id>/v2/event` | Pi → backend | Nhận/chấp nhận/từ chối lệnh, thay đổi trạng thái hoặc mất flight service | OFF |
+| `lac/<id>/v2/availability` | Pi → backend | Online/offline và boot ID khi online | ON, có Last Will |
+
+`received` chỉ nói service MQTT nhận payload. `accepted` nói flight
+service đã xử lý yêu cầu; telemetry/phase mới xác nhận mode và đích.
+Backend chưa được xác nhận đang đọc các topic v2. `/event` hiện chỉ có
+sự kiện lệnh, thay đổi trạng thái và mất flight service, chưa phải toàn bộ log. Không
+xuất payload `/data` hoặc `/debug` legacy.
+
+So với vòng đời ACK trong bản nháp:
+
+| Mức | Hiện trạng |
+|---|---|
+| `received` | Đã publish khi payload được parse và có ID mới |
+| `accepted` | Đã publish khi Flight Service nhận lời gọi mà không trả lỗi |
+| `rejected` | Đã publish cùng lý do khi validation/IPC/controller từ chối |
+| `executing` | Chưa gắn `command_id` với phase đang thực hiện |
+| `completed` | Chưa publish ACK hoàn thành; phải đọc `/state` và telemetry |
+| `failed` | Chưa publish ACK kết thúc thất bại; lỗi xuất hiện trong event/state/log |
+
+Broker username/password và ACL là lớp xác thực hiện tại. Code chưa có
+phân quyền ứng dụng riêng theo loại lệnh hoặc người vận hành.
+
+## Nội dung log và mục tiêu hoàn thiện
+
+Mỗi dòng JSONL hiện có `ts_utc`, `monotonic_ms`, `boot_id`, `session_id`,
+`service`, `record_type`, `severity`, `event`, `message` và các trường sự
+kiện thêm như `command_id`, `mission_id`, phase hoặc metrics. `flight`
+service ghi yêu cầu/chấp nhận/từ chối và thay đổi phase/mode/armed/landed;
+`control` service ghi kết nối MQTT, lệnh và mẫu sức khỏe Pi. ULog trên SD
+Pixhawk vẫn là nguồn chi tiết về điều khiển bay.
+
+Các việc còn thiếu theo bản nháp:
+
+1. Gắn `flight_id` xuyên control/flight/log/QGC ULog, ghi tiến độ từng lệnh
+   `requested → ACK PX4 → mode confirmed → arrived` và gom log theo chuyến.
+2. Đối chiếu mức DEBUG theo module trên Pi; tiếp tục bảo đảm không tắt
+   ERROR/CRITICAL, ARM, LAND và thay đổi phase.
+3. Thêm sức khỏe Pixhawk (battery, GPS fix/accuracy, failsafe/status text),
+   nguồn Pi, Wi-Fi, camera và ngưỡng cảnh báo đã đo trên thiết bị thật.
+4. Giới hạn kho log và cảnh báo đầy đĩa, xuất CSV/tải log qua kênh xác thực.
+5. Lưu ID lệnh bền qua reboot, phối hợp quyền MQTT/ACL với backend. Hiện chỉ
+   giữ 4096 ID gần nhất trong RAM; một
+   payload legacy giống hệt sau reboot hiện không thể phân biệt bản tin cũ.
+6. Mở rộng `/v2/event` cho cảnh báo đã phân loại và thêm outbox có giới
+   hạn cho ACK/event. Không phát lại lệnh bay cũ.
+
+Khi cần xem toàn bộ sự kiện trên một bảng, xuất từ log gốc trên Pi (không
+xóa hoặc sửa log gốc):
+
+```bash
+python3 pi/observability/export_logs.py --log-dir /var/lib/uav/logs \
+  --output /var/lib/uav/combined-review.csv --format csv
 ```
 
-- **Control service** giữ kết nối MQTT, xác thực và kiểm tra bản tin, quản lý
-  cấu hình cho phép thay đổi, gửi trạng thái/nhật ký lên broker. Nó không gọi
-  MAVSDK, không sở hữu cổng MAVLink và không tự quyết định UAV đã tới đích.
-- **Flight service** là chủ duy nhất của phiên MAVSDK/Pixhawk. Nó chạy FSM hiện
-  có, kiểm tra preflight, lệnh, mode và telemetry, rồi trả kết quả qua IPC.
-  Tách process giúp MQTT mất kết nối không trực tiếp đóng phiên bay, nhưng
-  không thay thế failsafe của PX4.
-- IPC có một hàng lệnh có thứ tự, giới hạn dung lượng và `command_id`. LAND /
-  DISARM được ưu tiên tại chỗ nhận lệnh, song một RPC MAVSDK đang chờ vẫn có
-  thể làm trễ xử lý. Không quảng cáo đây là kênh dừng khẩn cấp thời gian thực.
-- QGC vẫn nhận MAVLink qua router; QGC **không** subscribe MQTT trực tiếp.
-  PX4 ULog trên SD, log Pi và thông báo QGC là ba nguồn chứng cứ riêng.
+## Cấu hình, camera và OTA
 
-## 2. Topic và bản tin đề xuất
+Hiện MQTT chỉ được đổi chu kỳ state/health và bật DEBUG có hạn. Không nhận
+tham số PX4, motor mapping, calibration, mật khẩu hoặc lệnh shell qua MQTT.
+Camera chưa có driver; các trường resolution/fps/bitrate/frame drop chỉ
+được thêm khi adapter và cảm biến tương ứng có mặt.
 
-Giao thức backend hiện mới ghi `lac/<deviceID>/control`, `/data`, `/debug` và
-sáu lệnh `c:...;`; chưa có lệnh triển khai, Pause, Resume, Cancel, LAND,
-return-home hay ACK. Các topic dưới đây là **đề xuất phiên bản mới**; chỉ đổi
-khi backend thống nhất định dạng. Không trộn lệnh thử v2 vào topic legacy.
-
-| Topic đề xuất | Chiều | Nội dung | Retain |
-|---|---|---|---|
-| `lac/<id>/v2/command` | backend → Pi | Một lệnh JSON đầy đủ, có `command_id`, `mission_id`, hạn dùng | Không |
-| `lac/<id>/v2/ack` | Pi → backend | `received`/`rejected`/`accepted`, lý do và thời gian | Không |
-| `lac/<id>/v2/state` | Pi → backend | Phase Pi, mode/armed/landed PX4, đích, tuổi telemetry | Có thể giữ trạng thái cuối nhưng phải kèm `observed_at` và `online` |
-| `lac/<id>/v2/health` | Pi → backend | Pi, Pixhawk, link, nguồn, dung lượng log | Có thể; phải kèm tuổi mẫu |
-| `lac/<id>/v2/event` | Pi → backend | INFO/WARNING/ERROR/CRITICAL theo từng sự kiện | Không |
-| `lac/<id>/v2/availability` | Pi → backend | Online/offline và `boot_id` | Có; dùng Last Will |
-
-Đề xuất QoS 1 cho command/ACK/event quan trọng, QoS 0 cho telemetry chu kỳ;
-QoS chỉ xác nhận vận chuyển qua broker, nên `command_id` vẫn bắt buộc để
-chống thực thi lặp. Không dùng retain hoặc phiên subscribe bền cho lệnh bay.
-
-Mỗi lệnh nên là **một bản tin nguyên tử**, không gửi lat/lon/height/speed rời
-rạc rồi tự khởi hành khi nhận trường cuối. Ví dụ bản tin triển khai:
+Payload v2 bật debug dùng dạng sau; đổi `level` thành `INFO` để tắt sớm:
 
 ```json
 {
-  "schema": 2,
-  "command_id": "opaque-unique-id",
-  "mission_id": "opaque-mission-id",
-  "issued_at_utc": "2026-10-28T10:00:00Z",
-  "expires_at_utc": "2026-10-28T10:00:10Z",
-  "type": "gps_start",
-  "params": {
-    "a": {"lat_deg": 21.028511, "lon_deg": 105.854444},
-    "b": {"lat_deg": 21.02855, "lon_deg": 105.85448},
-    "height_above_launch_m": 2.5,
-    "speed_m_s": 0.4
-  }
+  "type": "debug_set",
+  "params": {"module": "flight", "level": "DEBUG", "duration_s": 600}
 }
 ```
 
-Control service từ chối schema sai, ID trùng, bản tin hết hạn, `retain=true`,
-giá trị không hữu hạn, lệnh ngoài allowlist hoặc thiếu quyền. Nó trả ACK
-**nhận lệnh** riêng với sự kiện **PX4 xác nhận mode** và **đã tới đích**; ACK
-MQTT không có nghĩa UAV đã bay. Sau Pi reboot, lệnh cũ không được chạy lại.
-`pause`, `resume`, `cancel`, `land`, `disarm`, `return_home`, `return_height`
-đều phải đi qua FSM hiện có. Cấu hình phần cứng/camera và OTA dùng nhóm lệnh
-riêng, không diễn giải như lệnh bay.
+Các trường bao ngoài `schema`, `command_id`, `mission_id`, `issued_at_utc`
+và `expires_at_utc` vẫn bắt buộc như mọi lệnh v2.
 
-## 3. Log tại Pi và bản tin debug
+OTA (*Over-the-Air*) là cập nhật code trên Pi qua mạng. Một luồng OTA đầy
+đủ cần gói có chữ ký/hash, kiểm tra version/thiết bị, UAV disarmed/on ground,
+nguồn và dung lượng, staging, health check và rollback. Không có luồng đó
+trong code hiện tại. Flash firmware Pixhawk là quy trình khác và không được
+gộp với cập nhật code Pi. Chỉ một IP/URL tải file không đủ để gọi là OTA.
 
-Giữ **log gốc trên Pi** trong kho lưu trữ có giới hạn dung lượng. Dùng **một
-file JSON Lines (`.jsonl`) cho mỗi phiên bay**: mỗi dòng là một sự kiện hoặc
-mẫu sức khỏe, có `record_type` và cùng bộ trường thời gian/phiên. Như vậy
-có thể mở trực tiếp và xuất CSV thành bảng với các cột CPU, RAM, nhiệt độ,
-phase, mức cảnh báo; trường chưa có dữ liệu để `null`. Không ép cả phiên vào
-một dòng văn bản dài. Tạo file mới theo phiên, xoay vòng nếu quá kích thước,
-giữ mức dung lượng tối đa và cảnh báo khi đĩa gần đầy. Ghi tuần tự; không để
-MQTT chậm chặn vòng điều khiển bay. Với sự kiện quan trọng, flush sớm.
-
-| Trường trong mỗi sự kiện | Ý nghĩa |
-|---|---|
-| `ts_utc`, `monotonic_ms`, `boot_id`, `flight_id` | Thời gian và phiên để đối chiếu sau reboot/lệch đồng hồ |
-| `source`, `severity`, `event`, `message` | Pi/MQTT/PX4/camera; INFO/WARNING/ERROR/CRITICAL; mã sự kiện; mô tả |
-| `command_id`, `mission_id`, `phase_before`, `phase_after` | Truy vết lệnh và FSM |
-| `px4_mode`, `armed`, `landed_state`, `telemetry_age_ms` | Bằng chứng trạng thái PX4 tại thời điểm đó |
-| `details` | Trường có cấu trúc: lý do từ chối, ACK, exception đã lược bỏ bí mật |
-
-Ghi sự kiện cho: khởi động/tắt service, kết nối/ngắt MQTT/MAVLink, nhận và
-từ chối lệnh, mọi chuyển phase, ARM/TAKEOFF/FLY/Mission/HOLD/LAND/DISARM,
-timeout, failsafe, lỗi sensor/nguồn, cập nhật cấu hình, OTA. Ghi **nhật ký
-bước** (requested → accepted → mode confirmed → target confirmed) để biết
-chu trình đã đi qua bước nào. Lấy snapshot telemetry định kỳ ở tần suất
-thấp vào cùng file phiên; không ghi mọi gói MAVLink thô vào JSONL. ULog PX4 là
-nguồn chi tiết cho phân tích điều khiển bay.
-
-Log level có thể thay đổi **theo module** qua lệnh cấu hình hợp lệ
-(`mqtt`, `flight`, `pixhawk`, `camera` khi có): INFO/DEBUG với thời hạn tự
-hết để tránh đầy đĩa. Không cho tắt ERROR/CRITICAL, các bước ARM/LAND/
-DISARM, ACK hay chuyển phase. Lệnh bật DEBUG phải được ghi vào log, giới
-hạn tốc độ và không ghi secret/payload chứa mật khẩu. Nếu lưu trên microSD,
-giới hạn tần suất ghi và dung lượng; khi có SSD/ổ lưu trữ riêng, đặt
-`--log-dir` vào đó sau khi kiểm tra quyền ghi và đường dẫn.
-
-`/event` chỉ gửi sự kiện đã chọn, có giới hạn tốc độ; `/debug` legacy chỉ
-được dùng sau khi backend chốt tương thích. MQTT ngắt thì log vẫn lưu local;
-outbox gửi lại chỉ áp dụng cho sự kiện/ACK đã có ID, có giới hạn dung lượng.
-Không phát lại lệnh điều khiển cũ. MQTT Explorer dùng để **xem** topic,
-không thay thế kho log hay phân tích ULog.
-
-Thông báo PX4 xuất hiện trong QGC có thể thu qua MAVSDK `StatusText` để lưu
-vào log Pi và chuyển lên MQTT. Cảnh báo do Pi tự tạo sẽ hiện trong web/MQTT;
-đưa chúng vào ô Vehicle Messages của QGC cần một bridge MAVLink STATUSTEXT
-riêng, hiện chưa có. Không ghi rằng QGC đã nhận cảnh báo Pi khi bridge đó
-chưa được triển khai và kiểm thử.
-
-## 4. Trường sức khỏe cần thu thập
-
-| Nguồn | Trường nên có | Tình trạng code hiện tại |
-|---|---|---|
-| Pi host | CPU %, nhiệt độ °C, RAM used/available, swap, disk free/used, uptime, `boot_id`, throttling/undervoltage, Wi-Fi RSSI/link | `diagnose_pi.py` đọc nhiệt độ, boot/throttling và journal theo yêu cầu; chưa thu liên tục CPU/RAM/disk/link |
-| Flight service | process alive, RSS, CPU %, lỗi cuối, phase, hàng lệnh, tuổi lần poll/telemetry | `status()` có phase và lỗi; chưa có process metrics/queue |
-| MQTT service | connected, broker RTT/last RX/TX, reconnect count, outbox size, last ACK | Chưa có service |
-| Pixhawk | connected, mode, armed, landed, health, GPS fix/accuracy, local/global position và tuổi mẫu, battery, failsafe/status text | Có phần mode/armed/landed/health/local/global; pin, GPS info, status text chưa được đăng ký đầy đủ |
-| Camera (nếu lắp) | detected, recording/streaming, resolution, fps, bitrate, frame drop, storage | Chưa có module camera; chỉ khai báo trường khi có thiết bị |
-
-Mỗi giá trị cần đơn vị, `observed_at_utc`, `age_ms` và trạng thái
-`valid`/`unavailable`; không tự thay dữ liệu thiếu bằng 0. WARNING là dấu hiệu
-cần kiểm tra (ví dụ nhiệt độ hoặc dung lượng giảm); CRITICAL là trạng thái
-đang ảnh hưởng đến điều khiển/ghi log. Ngưỡng cảnh báo chỉ đặt sau khi đo
-thực tế trên đúng Pi, nguồn và camera, không đoán một ngưỡng chung.
-
-## 5. Cấu hình từ xa và OTA
-
-- Chia cấu hình thành: **đọc được** (ngưỡng, tốc độ gửi telemetry), **có thể
-  thay đổi khi disarmed/on ground** (camera, một số giới hạn ứng dụng), và
-  **không sửa qua MQTT** (tham số PX4, motor mapping, calibration, secret,
-  nguồn/failsafe). Mỗi thay đổi cần version, kiểm tra khoảng giá trị, ACK,
-  log trước/sau và đường quay về cấu hình trước.
-- File cấu hình chứa broker host/port, TLS CA và device ID; secret lấy từ
-  file quyền hạn hạn chế hoặc secret store. Không gửi credential qua MQTT,
-  không commit Git. Cổng `8883` trong bảng chỉ là thông tin chưa xác minh;
-  không tắt xác minh chứng chỉ để kết nối cho nhanh.
-- OTA **không phải lệnh bay**. Tách gói phần mềm Pi khỏi firmware Pixhawk.
-  Trước OTA phải có `armed=false`, `ON_GROUND`, nguồn và dung lượng đủ, gói
-  có hash/chữ ký, version/thiết bị phù hợp, staging và rollback. Không OTA
-  trong chuyến bay. URL/IP download là một trường cấu hình có kiểm tra nguồn,
-  không phải lệnh shell chạy trực tiếp từ MQTT. Việc flash firmware Pixhawk
-  cần quy trình riêng và kiểm thử trên bàn; chưa triển khai trong dự án này.
-
-## 6. Thứ tự triển khai
-
-1. Chốt broker, TLS, `deviceID`, quyền publish/subscribe và schema/ACK với
-   backend; thử chỉ đọc bằng MQTT Explorer. Bản giao thức sáu lệnh cũ chưa
-   đủ để tự chạy nhiệm vụ.
-2. Thêm event log JSONL và metrics Pi/Pixhawk, có rotation, kiểm tra Pi
-   reboot/mất mạng/đĩa đầy. So sánh với log console và ULog.
-3. Tách flight service một chủ MAVSDK và control service MQTT; thử các lệnh
-   bằng fake controller/HITL trước khi cho quyền actuation trên UAV thật.
-4. Chỉ sau khi đường bay và log ổn định mới bổ sung cấu hình camera/OTA.
-
-Nguồn tham khảo: [MQTT QoS/Retain/Will](https://mosquitto.org/man/mqtt-7.html),
-[MAVSDK Telemetry](https://mavsdk.mavlink.io/main/en/cpp/api_reference/classmavsdk_1_1_telemetry.html).
+QGC không subscribe MQTT. Cảnh báo do Pi tạo hiện chưa được bridge sang
+MAVLink STATUSTEXT của QGC; không coi một bản tin MQTT là thông báo QGC.

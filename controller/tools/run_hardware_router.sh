@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run one MAVLink Router for real-aircraft USB, local Pi console and remote QGC.
+# Run one MAVLink Router for Pixhawk USB, Pi flight service and remote QGC.
 set -euo pipefail
 
 if [[ $# -ne 2 ]]; then
@@ -44,7 +44,7 @@ TcpServerPort = 0
 Device = $serial_device
 Baud = 921600
 
-[UdpEndpoint pi_console]
+[UdpEndpoint pi_flight]
 Mode = Normal
 Address = 127.0.0.1
 Port = 14540
@@ -55,5 +55,5 @@ Address = $pc_ip
 Port = 14550
 EOF
 
-printf 'Router: Pixhawk %s ↔ Pi console 127.0.0.1:14540 ↔ QGC %s:14550\n' "$serial_device" "$pc_ip"
+printf 'Router: Pixhawk %s ↔ Pi flight service 127.0.0.1:14540 ↔ QGC %s:14550\n' "$serial_device" "$pc_ip"
 mavlink-routerd -c "$config_dir/main.conf" -d "$config_dir/empty"

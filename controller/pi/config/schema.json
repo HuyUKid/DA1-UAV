@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "UAV Control Service runtime configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "state_interval_s": {
+      "type": "number",
+      "minimum": 0.5,
+      "maximum": 60.0
+    },
+    "health_interval_s": {
+      "type": "number",
+      "minimum": 2.0,
+      "maximum": 300.0
+    }
+  }
+}

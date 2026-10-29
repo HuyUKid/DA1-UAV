@@ -17,7 +17,7 @@
         <mxCell id="A" parent="1" style="shape=rectangle;whiteSpace=wrap;html=0;rounded=0;fillColor=#edf3fc;strokeColor=#4b6585;strokeWidth=2;fontFamily=Verdana;fontSize=22;fontColor=#203044;align=center;verticalAlign=middle;spacing=8;" value="Pi: đọc cấu hình, kiểm tra profile&#10;PX4: cung cấp telemetry và SYS_HITL" vertex="1">
           <mxGeometry height="80" width="500" x="790" y="235" as="geometry" />
         </mxCell>
-        <mxCell id="B" parent="1" style="shape=rectangle;whiteSpace=wrap;html=0;rounded=0;fillColor=#edf3fc;strokeColor=#4b6585;strokeWidth=2;fontFamily=Verdana;fontSize=22;fontColor=#203044;align=center;verticalAlign=middle;spacing=8;" value="Pi: kết nối MAVLink tới Pixhawk&#10;và nhận lệnh từ console" vertex="1">
+        <mxCell id="B" parent="1" style="shape=rectangle;whiteSpace=wrap;html=0;rounded=0;fillColor=#edf3fc;strokeColor=#4b6585;strokeWidth=2;fontFamily=Verdana;fontSize=22;fontColor=#203044;align=center;verticalAlign=middle;spacing=8;" value="Nhánh thử local NED: Pi kết nối MAVLink&#10;và nhận lệnh console" vertex="1">
           <mxGeometry height="80" width="500" x="790" y="370" as="geometry" />
         </mxCell>
         <mxCell id="C" parent="1" style="shape=rectangle;whiteSpace=wrap;html=0;rounded=0;fillColor=#edf3fc;strokeColor=#4b6585;strokeWidth=2;fontFamily=Verdana;fontSize=22;fontColor=#203044;align=center;verticalAlign=middle;spacing=8;" value="Pi: chờ lệnh console theo trạng thái&#10;HOLD giữ tới lệnh tiếp theo" vertex="1">
@@ -446,7 +446,7 @@
         <mxCell id="e26" value="ra ngoài ngưỡng FLY" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1" source="settle" target="fly">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="note" value="Pi giám sát acceptance/dwell; không phải PX4 waypoint ACK.&#10;HOLD giữ tới lệnh fly x y đầy đủ. Pause lưu đích; Resume dùng lại đích; Cancel HOLD tại chỗ.&#10;LAND/DISARM đi qua khóa đích khi console xử lý lệnh.&#10;Sơ đồ rút gọn; xem FLIGHT_STATES.md và status để xác nhận trạng thái." style="rounded=1;whiteSpace=wrap;html=0;fillColor=#edf3fc;strokeColor=#4b6585;fontSize=18;" vertex="1" parent="1">
+        <mxCell id="note" value="Sơ đồ nhánh thử local NED; web dùng GPS A→B qua control/flight service.&#10;Pi giám sát acceptance/dwell; không phải PX4 waypoint ACK.&#10;HOLD giữ tới lệnh fly x y đầy đủ; LAND/DISARM đi qua khóa khi console xử lý.&#10;Xem FLIGHT_STATES.md và PI_SERVICES.md để đối chiếu trạng thái." style="rounded=1;whiteSpace=wrap;html=0;fillColor=#edf3fc;strokeColor=#4b6585;fontSize=18;" vertex="1" parent="1">
           <mxGeometry x="80" y="1750" width="1450" height="115" as="geometry" />
         </mxCell>
         <mxCell id="e27" source="armed" target="land" value="land" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1">
@@ -460,6 +460,71 @@
         </mxCell>
         <mxCell id="e30" source="end" target="idle" value="Sẵn sàng kiểm tra cho lệnh mới" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1">
           <mxGeometry as="geometry" relative="1" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="uav-web-services" name="Kiến trúc Web MQTT và hai service">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1000" math="0" shadow="0">
+      <root>
+        <mxCell id="sys0" />
+        <mxCell id="sys1" parent="sys0" />
+        <mxCell id="sys_title" value="Luồng sản phẩm chính: Web → MQTT → Control Service → IPC → Flight Service → PX4" style="text;html=0;align=center;verticalAlign=middle;fontSize=26;fontStyle=1;fontColor=#203044;" vertex="1" parent="sys1">
+          <mxGeometry x="150" y="40" width="1300" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="sys_web" value="Web / Backend&#10;GPS A→B, pause, resume, cancel, return, land" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=18;" vertex="1" parent="sys1">
+          <mxGeometry x="70" y="180" width="250" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="sys_mqtt" value="MQTT Broker&#10;TLS + ACL&#10;lac/&lt;deviceID&gt;/..." style="rounded=1;whiteSpace=wrap;html=0;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=18;" vertex="1" parent="sys1">
+          <mxGeometry x="380" y="180" width="220" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="sys_control" value="Control Service&#10;MQTT, protocol, ACK/state/health&#10;config, camera/OTA capability&#10;Không mở MAVSDK" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=18;" vertex="1" parent="sys1">
+          <mxGeometry x="660" y="155" width="280" height="170" as="geometry" />
+        </mxCell>
+        <mxCell id="sys_ipc" value="Unix socket IPC&#10;JSON có giới hạn&#10;/run/uav/flight.sock" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#f5f5f5;strokeColor=#666666;fontSize=18;" vertex="1" parent="sys1">
+          <mxGeometry x="1000" y="180" width="220" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="sys_flight" value="Flight Service&#10;Chủ duy nhất MAVSDK&#10;GPS Mission + Offboard FSM&#10;kiểm tra PX4 trước lệnh" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=18;" vertex="1" parent="sys1">
+          <mxGeometry x="1280" y="155" width="260" height="170" as="geometry" />
+        </mxCell>
+        <mxCell id="sys_px4" value="Pixhawk / PX4&#10;EKF + vòng điều khiển bay&#10;telemetry + ULog" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#f8cecc;strokeColor=#b85450;fontSize=18;" vertex="1" parent="sys1">
+          <mxGeometry x="1280" y="430" width="260" height="135" as="geometry" />
+        </mxCell>
+        <mxCell id="sys_obs" value="Observability dùng chung&#10;JSONL event log + Pi metrics&#10;xuất CSV/JSONL" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=18;" vertex="1" parent="sys1">
+          <mxGeometry x="720" y="445" width="300" height="135" as="geometry" />
+        </mxCell>
+        <mxCell id="sys_qgc" value="QGroundControl&#10;PX4 telemetry / Vehicle Messages&#10;không subscribe MQTT" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=18;" vertex="1" parent="sys1">
+          <mxGeometry x="1280" y="680" width="260" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="sys_console" value="console.py&#10;Công cụ thử local NED riêng&#10;không chạy cùng Flight Service&#10;không kết nối MQTT" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=17;" vertex="1" parent="sys1">
+          <mxGeometry x="70" y="680" width="280" height="125" as="geometry" />
+        </mxCell>
+        <mxCell id="sys_note" value="Hiện có: received / accepted / rejected. Chưa có ACK executing / completed / failed, flight_id, camera thật, OTA hay QGC STATUSTEXT bridge." style="rounded=1;whiteSpace=wrap;html=0;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=17;" vertex="1" parent="sys1">
+          <mxGeometry x="500" y="700" width="600" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="sys_e1" edge="1" parent="sys1" source="sys_web" target="sys_mqtt" value="command / state" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=16;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="sys_e2" edge="1" parent="sys1" source="sys_mqtt" target="sys_control" value="MQTT TLS" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=16;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="sys_e3" edge="1" parent="sys1" source="sys_control" target="sys_ipc" value="validated command" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=16;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="sys_e4" edge="1" parent="sys1" source="sys_ipc" target="sys_flight" value="request / response" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=16;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="sys_e5" edge="1" parent="sys1" source="sys_flight" target="sys_px4" value="MAVSDK / MAVLink" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=16;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="sys_e6" edge="1" parent="sys1" source="sys_control" target="sys_obs" value="control log + health" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=16;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="sys_e7" edge="1" parent="sys1" source="sys_flight" target="sys_obs" value="flight event + state" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=16;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="sys_e8" edge="1" parent="sys1" source="sys_px4" target="sys_qgc" value="telemetry" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=16;">
+          <mxGeometry relative="1" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>

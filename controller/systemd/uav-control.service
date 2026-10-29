@@ -1,0 +1,21 @@
+[Unit]
+Description=UAV MQTT control and observability service
+After=network-online.target uav-flight.service
+Wants=network-online.target uav-flight.service
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/uav/current/controller
+EnvironmentFile=/etc/uav/uav.env
+RuntimeDirectory=uav
+RuntimeDirectoryPreserve=yes
+StateDirectory=uav
+ExecStart=/home/pi/uav/current/controller/.venv/bin/python pi/control/service.py --device-id ${UAV_DEVICE_ID} --username ${UAV_MQTT_USERNAME} --password-file /etc/uav/mqtt-password --host ${UAV_MQTT_HOST} --port ${UAV_MQTT_PORT} --flight-socket /run/uav/flight.sock --config-file /var/lib/uav/control.json --log-dir /var/lib/uav/logs
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

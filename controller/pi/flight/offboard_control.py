@@ -4,9 +4,9 @@ import logging
 import math
 import time
 from dataclasses import asdict
-from flight_policy import ArrivalMonitor, FlightPolicy
-from validation import number
-from pixhawk import Pixhawk, json_safe
+from flight.flight_policy import ArrivalMonitor, FlightPolicy
+from flight.validation import number
+from flight.pixhawk import Pixhawk, json_safe
 
 
 class OffboardControl(Pixhawk):

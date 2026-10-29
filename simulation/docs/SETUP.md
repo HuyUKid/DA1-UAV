@@ -37,12 +37,16 @@ lịch sử tạo model, không phải đường dẫn mà launcher sẽ sử d�
 ## Bộ mô phỏng đang có
 
 ```text
-Pi chạy console → TELEM2 → Pixhawk chạy PX4 ở HITL
-                              ↕ USB / HIL_SENSOR / HIL_ACTUATOR_CONTROLS
-                         PC chạy Gazebo Classic 11
-                              ↕ UDP
-                         QGroundControl / observer
+Web → MQTT → control service → flight service → Pixhawk PX4 (SYS_HITL=1)
+                            (PC qua UDP hoặc Pi qua TELEM2)
+                                          ↕ USB / HIL_SENSOR / HIL_ACTUATOR_CONTROLS
+                                    PC chạy Gazebo Classic 11
+                                          ↕ UDP
+                                    QGroundControl
 ```
+
+Chỉ chạy một flight service sở hữu cổng MAVLink tại một thời điểm. Console
+local NED là công cụ thử kỹ thuật riêng; luồng web dùng hai service.
 
 Đây là model X500 port sang **Gazebo Classic**, dùng MAVLink HIL bridge.
 Tên model bên trong SDF là `x500_hitl`, mã mô phỏng ở `simulation/x500/`
@@ -116,9 +120,11 @@ rsync -av --exclude='.venv/' --exclude='__pycache__/' --exclude='artifacts/' \
 ```
 
 Trên PC đó, `cd ~/uav` trước khi chạy các lệnh cài/kiểm tra.
-PC cần Gazebo Classic/plugin/Python observer và USB nối Pixhawk. Pi vẫn
-chạy `controller/pi/console.py` qua TELEM2 như
-[README chính](../../README.md), không chạy code điều khiển bay trên PC.
+PC cần Gazebo Classic/plugin/Python observer và USB nối Pixhawk. Pi có thể
+chạy hai service qua TELEM2 theo
+[hướng dẫn Pi HITL](../../controller/docs/PI_HITL_REMOTE.md). Nếu chạy hai
+service ngay trên PC mô phỏng thì cần clone cả `controller/` và dùng UDP
+loopback 14540 như [README chính](../../README.md).
 QGC có thể chạy trên PC mô phỏng qua UDP loopback. Nếu đặt QGC ở máy
 khác, cấu hình địa chỉ forwarding/firewall theo mạng thực; model đang
 forward về `127.0.0.1` nên chưa tự chuyển tới IP máy QGC bên ngoài.
@@ -226,7 +232,7 @@ trong phạm vi [báo cáo](ALGORITHM_VALIDATION_2026-10-26.md). Hướng dẫn 
 PX4 cũng ghi rõ HITL được cộng đồng duy trì và cần kiểm tra tương thích
 phiên bản. [PX4 HITL](https://docs.px4.io/v1.16/en/simulation/hitl).
 
-1. Pixhawk USB nối PC; TELEM2 nối Pi nếu dùng Pi, hoặc dùng console PC qua UDP
+1. Pixhawk USB nối PC; TELEM2 nối Pi nếu dùng Pi, hoặc dùng flight service PC qua UDP
    loopback. Baud/Onboard mode khớp README.
 2. Trong QGC, sao lưu tham số, nạp `simulation/params/x500_hitl.params`
    sau khi reset PX4 về defaults nếu thực hiện reset, reboot, đọc lại
@@ -261,7 +267,7 @@ và chạy test sau mỗi lần thay nguồn.
 `simulation/params/x500_hitl.params` chứa cấu hình HIL Quad-X, giao tiếp
 TELEM2 và giới hạn bay chậm đã thử trên Pixhawk/PX4 1.17.0 ngày 26/10.
 Đặt `COM_RC_IN_MODE=4` cho bài kiểm tra PC qua terminal không có radio;
-console PC gửi heartbeat loại ground station. File cũng có hai breaker nguồn/
+flight service PC gửi heartbeat loại ground station. File cũng có hai breaker nguồn/
 safety phục vụ HITL và hover 0,74 chỉ đúng cho model X500. Reboot sau import,
 đối chiếu các tham số và preflight trong QGC trước ARM. Xem
 [báo cáo bay](ALGORITHM_VALIDATION_2026-10-26.md) và file
@@ -290,32 +296,19 @@ trước khi ngắt HIL. Kết quả nằm trong
 Riêng smoke test này luôn ghi `flight_verified=false` vì chỉ quan sát DISARM;
 bài bay và đo đáp ứng nằm trong [báo cáo riêng](ALGORITHM_VALIDATION_2026-10-26.md).
 
-## Console trên PC, không dùng Pi
+## Kết nối web/flight service trên PC
 
-Nếu có bản clone đầy đủ dự án, sau khi mở Gazebo, từ gốc dự án chạy:
+Nếu clone đủ repository, cài dependency cho controller trong venv mô phỏng
+và chạy flight service qua UDP loopback 14540, control service qua MQTT như
+[PI_SERVICES.md](../../controller/docs/PI_SERVICES.md). Gazebo giữ USB
+Pixhawk; flight service không mở USB lần thứ hai. Không chạy observer,
+console hoặc smoke test khác đồng thời trên UDP 14540. Nếu chép riêng
+`simulation/`, đặt hai service ở Pi qua TELEM2; phần mô phỏng vẫn độc lập
+với code Pi.
 
-```bash
-simulation/.venv/bin/python -m pip install --only-binary=:all: -r controller/pi/requirements.txt
-simulation/.venv/bin/python controller/pi/console.py --profile hitl \
-  --connection udpin://127.0.0.1:14540 --check
-```
-
-Kiểm tra đọc trạng thái qua UDP trên PC ngày 26/10 đạt. Sau đó đã bay thử
-với `--enable-actuation`; xem [kết quả HITL](ALGORITHM_VALIDATION_2026-10-26.md).
-Lệnh `--check` bên trên vẫn chỉ đọc, không gửi ARM.
-Không chạy `observe.py` hay smoke test đồng thời với console trên UDP 14540.
-Gazebo giữ USB; console không mở USB lần thứ hai.
-
-Khi trạng thái đạt yêu cầu, mở console tương tác:
-
-```bash
-simulation/.venv/bin/python controller/pi/console.py --profile hitl \
-  --connection udpin://127.0.0.1:14540 --height 2 --enable-actuation
-```
-
-Console vẫn dùng cùng FSM và local NED; hardware profile chỉ chấp nhận
-serial. Cách này không cần Pi, nhưng cần Pixhawk thật ở HITL. Nếu chỉ chép
-riêng `simulation/`, tiếp tục dùng console trên Pi như luồng ban đầu.
+Bài bay HITL ngày 26/10 được đo qua console kỹ thuật, xem
+[kết quả](ALGORITHM_VALIDATION_2026-10-26.md). Hai service web mới cần
+smoke test riêng trước khi kết luận tương đương.
 
 ## Chạy và kiểm chứng luồng bay
 
@@ -326,13 +319,16 @@ PX4_HOME_LAT=47.397742 PX4_HOME_LON=8.545594 PX4_HOME_ALT=488 \
 simulation/.venv/bin/python simulation/x500/launch.py --serial auto
 ```
 
-Pi dùng console với `--profile hitl` theo README. Thử từng bước:
-`takeoff → chờ HOLD → fly x y → chờ HOLD → land → chờ disarm/ON_GROUND`.
-Thử khóa tọa độ khi TAKEOFF/FLY, timeout, ưu tiên LAND và QGC tiếp quản.
+Service dùng `--profile hitl` theo README. Với web, kiểm tra lần lượt:
+payload GPS A→B → TAKEOFF/HOLD → MISSION → GPS_COMPLETE/HOLD → LAND →
+DISARM/ON_GROUND. Sau đó thử pause/resume, cancel, return-home và
+return-height bằng lệnh v2 khi backend hỗ trợ. Lệnh LAND cục bộ đi qua
+`flight/client.py`; không mở console thứ hai trên cùng UDP.
 Đối chiếu cả pose mô phỏng lẫn ước lượng PX4; một cờ tới đích trên Pi
 không thay thế kiểm tra chuyển động thực trong simulator.
 
-Ở terminal khác, đọc dữ liệu bằng một observer duy nhất:
+Khi **flight service đã dừng và Pixhawk disarmed**, có thể đọc bằng một
+observer độc lập:
 
 ```bash
 simulation/.venv/bin/python simulation/x500/observe.py --seconds 30

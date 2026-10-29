@@ -1,16 +1,15 @@
-from pathlib import Path
-import sys
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "pi"))
-
 import threading
 import sys
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 from types import ModuleType
 from unittest.mock import Mock, patch
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'pi'))
 from console import execute, parse_command
-from flight_policy import ArrivalMonitor, FlightPolicy
-from offboard_control import OffboardControl
+from flight.flight_policy import ArrivalMonitor, FlightPolicy
+from flight.offboard_control import OffboardControl
 
 
 class ControllerTests(unittest.TestCase):
@@ -19,7 +18,7 @@ class ControllerTests(unittest.TestCase):
         clock = patch('time.monotonic', side_effect=lambda: self.now)
         clock.start()
         self.addCleanup(clock.stop)
-        self.sleep = patch('offboard_control.time.sleep', side_effect=self.advance)
+        self.sleep = patch('flight.offboard_control.time.sleep', side_effect=self.advance)
         self.sleep_mock = self.sleep.start()
         self.addCleanup(self.sleep.stop)
         self.fc = self.make_fc()
@@ -564,7 +563,7 @@ class ControllerTests(unittest.TestCase):
         offboard.Offboard, offboard.PositionNedYaw = offboard_factory, Mock()
         with patch.dict(sys.modules, {'mavsdk.plugins.mavlink_direct': direct,
                                      'mavsdk.plugins.offboard': offboard}), \
-                patch('offboard_control.Pixhawk.__init__', new=base_init):
+                patch('flight.offboard_control.Pixhawk.__init__', new=base_init):
             fc = OffboardControl('serial:///dev/fake:921600', 'hardware')
         offboard_factory.assert_not_called()
         fc.action.arm.assert_not_called()
@@ -804,7 +803,7 @@ class ControllerTests(unittest.TestCase):
             obj.sdk, obj.param = Mock(), Mock()
             obj.param.get_param_float.side_effect = RuntimeError('parameter timeout')
             self.created = obj
-        with patch('offboard_control.Pixhawk.__init__', new=base_init):
+        with patch('flight.offboard_control.Pixhawk.__init__', new=base_init):
             with self.assertRaisesRegex(RuntimeError, 'parameter timeout'):
                 OffboardControl('serial:///dev/fake:921600', 'hardware')
         self.created.sdk.destroy.assert_called_once()

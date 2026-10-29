@@ -3,7 +3,7 @@ import logging
 import math
 import threading
 import time
-from deployment import validate_connection
+from flight.deployment import validate_connection
 
 
 def json_safe(value):

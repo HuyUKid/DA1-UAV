@@ -1,14 +1,14 @@
 """Two-waypoint A-then-B PX4 Mission, operated from one Pi session.
 
-No network protocol is assumed here. A future MQTT adapter must call these
-methods, rather than send latitude/longitude to the local-NED fly command.
+Network adapters call these methods through the flight service, rather than
+send latitude/longitude to the local-NED fly command.
 """
 import math
 import time
 from dataclasses import dataclass
 
-from offboard_control import OffboardControl
-from validation import number
+from flight.offboard_control import OffboardControl
+from flight.validation import number
 
 
 def distance_m(lat1, lon1, lat2, lon2):
@@ -119,8 +119,53 @@ class GpsMissionControl(OffboardControl):
         return result
 
     def return_height(self):
+        self._cancel_paused_gps_for_return(home=False)
         self._adopt_completed_gps_hold()
         return super().return_height()
+
+    def _cancel_paused_gps_for_return(self, home):
+        self.refresh()
+        speed_hint = None
+        if self.phase == 'GPS_PAUSED':
+            if home and self.gps_plan_data is not None:
+                speed_hint = self.gps_plan_data['speed_m_s']
+            if not self.takeoff_complete or self.launch_ned is None:
+                raise ValueError('Return requires completed TAKEOFF and saved launch position')
+            lat, lon, rel = self._in_air_hold()
+            if home:
+                if self.launch_gps is None:
+                    raise ValueError('Return-home requires saved launch GPS')
+                if distance_m(lat, lon, self.launch_gps['latitude_deg'],
+                              self.launch_gps['longitude_deg']) > (
+                        2 * self.gps_limits.max_leg_m + self.gps_limits.start_error_m):
+                    raise ValueError('Launch point exceeds configured return distance limit')
+                self._check_hold_altitude()
+                mission_min = number(self.param.get_param_float('MIS_TAKEOFF_ALT'),
+                                     'MIS_TAKEOFF_ALT', 0, 100)
+                self._return_home_altitude(rel, mission_min)
+            elif self.nav_min_ltr_alt > self.height:
+                raise ValueError('NAV_MIN_LTR_ALT exceeds the TAKEOFF height')
+            self.gps_cancel()
+            if self.phase != 'GPS_CANCELLED':
+                raise RuntimeError('GPS cancel is pending; wait for GPS_CANCELLED/HOLD '
+                                   'before retrying the return command')
+        return speed_hint
+
+    def _return_home_altitude(self, relative_altitude_m, mission_min_m):
+        """Clamp estimator noise at the PX4 mission floor, reject a real climb.
+
+        Local-NED return-height and GLOBAL_POSITION_INT relative altitude do
+        not share an identical zero and both contain estimator noise.  Permit
+        at most 10 cm (and never more than the configured vertical arrival
+        tolerance), then explicitly request PX4's minimum mission altitude.
+        """
+        tolerance = min(self.policy.z_tolerance_m, 0.1)
+        if relative_altitude_m + tolerance < mission_min_m:
+            raise ValueError(
+                f'Return-home would force a climb: current relative altitude '
+                f'{relative_altitude_m:.2f} m is below MIS_TAKEOFF_ALT '
+                f'{mission_min_m:.2f} m beyond tolerance {tolerance:.2f} m')
+        return max(relative_altitude_m, mission_min_m)
 
     def _adopt_completed_gps_hold(self):
         """Hand a cancelled/completed GPS HOLD back to local NED control."""
@@ -187,16 +232,32 @@ class GpsMissionControl(OffboardControl):
                            min(self.gps_limits.max_speed_m_s, self.px4_xy_vel_max))
         approach = distance_m(lat, lon, start_lat, start_lon)
         leg = distance_m(start_lat, start_lon, end_lat, end_lon)
-        if not 0.5 <= approach <= self.gps_limits.max_leg_m:
-            raise ValueError('Current-to-A leg is outside the configured distance limit')
-        if not 0.5 <= leg <= self.gps_limits.max_leg_m:
-            raise ValueError('A-to-B leg is outside the configured distance limit')
+        # Web coordinates can lag or be rounded while the estimator wanders
+        # around a stationary vehicle.  Use the existing plan-freshness radius
+        # only to recognize intent; the actual waypoint is pinned to fresh PX4
+        # GPS below, so this allowance never commands that horizontal offset.
+        stationary_radius = max(self.gps_limits.start_error_m,
+                                2 * self.policy.xy_tolerance_m)
+        same_point_radius = self.policy.xy_tolerance_m
+        vertical_only = approach <= stationary_radius and leg <= same_point_radius
+        if vertical_only:
+            # A=B at the fresh vehicle position means "change only altitude".
+            # Pin the mission waypoint to the observed position so stale web
+            # rounding cannot introduce an unintended horizontal correction.
+            start_lat = end_lat = lat
+            start_lon = end_lon = lon
+            approach = leg = 0.0
+        else:
+            if not 0.5 <= approach <= self.gps_limits.max_leg_m:
+                raise ValueError('Current-to-A leg is outside the configured distance limit')
+            if not 0.5 <= leg <= self.gps_limits.max_leg_m:
+                raise ValueError('A-to-B leg is outside the configured distance limit')
         self.gps_plan_data = dict(start_lat=start_lat, start_lon=start_lon,
                                   end_lat=end_lat, end_lon=end_lon,
                                   origin_lat=lat, origin_lon=lon,
                                   height_above_launch_m=height_m,
                                   speed_m_s=speed_m_s, approach_m=approach,
-                                  leg_m=leg,
+                                  leg_m=leg, vertical_only=vertical_only,
                                   start_in_air=air)
         return dict(self.gps_plan_data)
 
@@ -227,6 +288,28 @@ class GpsMissionControl(OffboardControl):
             raise RuntimeError('TAKEOFF was not confirmed; GPS leg was not started')
         self.gps_launch_pending = True
 
+    def _mission_item(self, latitude_deg, longitude_deg, relative_altitude_m,
+                      speed_m_s, loiter_time_s=math.nan):
+        # The native MAVSDK 4 binding accepts None in __init__ but its C
+        # conversion requires numbers and enum values for every field.
+        return self.MissionItem(
+            latitude_deg=latitude_deg, longitude_deg=longitude_deg,
+            relative_altitude_m=relative_altitude_m, speed_m_s=speed_m_s,
+            is_fly_through=False, gimbal_pitch_deg=math.nan,
+            gimbal_yaw_deg=math.nan, camera_action=self.MissionItem.CameraAction.NONE,
+            loiter_time_s=loiter_time_s, camera_photo_interval_s=1.0,
+            acceptance_radius_m=math.nan, yaw_deg=math.nan,
+            camera_photo_distance_m=math.nan,
+            vehicle_action=self.MissionItem.VehicleAction.NONE)
+
+    def _confirm_new_mission_ready(self):
+        # Upload ACK can precede PX4 Commander seeing the replacement mission.
+        # This same sequence was exercised by return-home in HITL on 2026-10-29.
+        time.sleep(1.0)
+        self._in_air_hold()
+        self.mission.set_current_mission_item(0)
+        self._in_air_hold()
+
     def _launch_gps_leg(self):
         if (self.gps_plan_data is None or self.phase not in {
                 'HOLD', 'GPS_CANCELLED', 'GPS_COMPLETE', 'HOME_COMPLETE'}
@@ -250,20 +333,25 @@ class GpsMissionControl(OffboardControl):
         if target_rel < mission_takeoff_min:
             raise ValueError('GPS cruise height is below PX4 MIS_TAKEOFF_ALT; '
                              'mission could climb above the selected height')
-        first = self.MissionItem(latitude_deg=plan['start_lat'],
-                                 longitude_deg=plan['start_lon'],
-                                 relative_altitude_m=target_rel,
-                                 speed_m_s=plan['speed_m_s'], is_fly_through=False)
-        last = self.MissionItem(latitude_deg=plan['end_lat'],
-                                longitude_deg=plan['end_lon'],
-                                relative_altitude_m=target_rel,
-                                speed_m_s=plan['speed_m_s'], is_fly_through=False,
-                                loiter_time_s=1.0)
-        mission_plan = self.MissionPlan(mission_items=[first, last])
+        if plan.get('vertical_only'):
+            items = [self._mission_item(plan['end_lat'], plan['end_lon'],
+                                        target_rel, plan['speed_m_s'], loiter_time_s=1.0)]
+        else:
+            first = self._mission_item(plan['start_lat'], plan['start_lon'],
+                                       target_rel, plan['speed_m_s'])
+            last = self._mission_item(plan['end_lat'], plan['end_lon'],
+                                      target_rel, plan['speed_m_s'], loiter_time_s=1.0)
+            items = [first, last]
+        mission_plan = self.MissionPlan(mission_items=items)
         # This option affects the next upload, so it must precede upload.
         self.mission.set_return_to_launch_after_mission(False)
         self.mission.upload_mission(mission_plan)
         self.gps_mission_stored = True
+        try:
+            self._confirm_new_mission_ready()
+        except Exception as error:
+            self._gps_unconfirmed(f'New GPS mission was not ready: {error}')
+            raise
         self.stop_stream()  # Native PX4 HOLD already owns the vehicle.
         self.gps_epoch = time.monotonic()
         self.gps_finish_hold_requested_at = None
@@ -277,7 +365,7 @@ class GpsMissionControl(OffboardControl):
     def return_home(self):
         """Return to the GPS position captured at TAKEOFF and HOLD at current height."""
         self.require()
-        self.refresh()
+        speed_hint = self._cancel_paused_gps_for_return(home=True)
         if (not self.takeoff_complete or self.launch_gps is None
                 or self.phase not in {'HOLD', 'GPS_CANCELLED', 'GPS_COMPLETE', 'HOME_COMPLETE'}):
             raise ValueError('Return-home requires completed TAKEOFF, saved launch GPS '
@@ -292,8 +380,12 @@ class GpsMissionControl(OffboardControl):
         if distance > 2 * self.gps_limits.max_leg_m + self.gps_limits.start_error_m:
             raise ValueError('Launch point exceeds configured return distance limit')
         self._check_hold_altitude()
-        speed = (self.gps_plan_data['speed_m_s'] if self.gps_plan_data is not None
-                 else min(self.gps_limits.max_speed_m_s, self.px4_xy_vel_max))
+        mission_min = number(self.param.get_param_float('MIS_TAKEOFF_ALT'),
+                             'MIS_TAKEOFF_ALT', 0, 100)
+        request_rel = self._return_home_altitude(rel, mission_min)
+        speed = (speed_hint if speed_hint is not None else
+                 self.gps_plan_data['speed_m_s'] if self.gps_plan_data is not None else
+                 min(self.gps_limits.max_speed_m_s, self.px4_xy_vel_max))
         self.home_return_target = {
             'latitude_deg': self.launch_gps['latitude_deg'],
             'longitude_deg': self.launch_gps['longitude_deg'],
@@ -301,7 +393,7 @@ class GpsMissionControl(OffboardControl):
                 local['down_m'], 'down_m', -10000, 10000),
             'speed_m_s': speed,
             'distance_m': distance,
-            'request_relative_altitude_m': rel,
+            'request_relative_altitude_m': request_rel,
         }
         self.gps_plan_data = None
         self.gps_launch_pending = False
@@ -330,19 +422,17 @@ class GpsMissionControl(OffboardControl):
                             'return_relative_altitude_m', 0.5, 100)
         mission_min = number(self.param.get_param_float('MIS_TAKEOFF_ALT'),
                              'MIS_TAKEOFF_ALT', 0, 100)
-        if target_rel < mission_min:
-            raise ValueError('PX4 MIS_TAKEOFF_ALT would force a climb during return-home')
+        target_rel = self._return_home_altitude(target_rel, mission_min)
         if self.gps_mission_stored:
             self.mission.clear_mission()
             self.gps_mission_stored = False
-        item = self.MissionItem(latitude_deg=target['latitude_deg'],
-                                longitude_deg=target['longitude_deg'],
-                                relative_altitude_m=target_rel,
-                                speed_m_s=target['speed_m_s'],
-                                is_fly_through=False, loiter_time_s=1.0)
+        item = self._mission_item(target['latitude_deg'], target['longitude_deg'],
+                                  target_rel, target['speed_m_s'], loiter_time_s=1.0)
         self.mission.set_return_to_launch_after_mission(False)
         self.mission.upload_mission(self.MissionPlan(mission_items=[item]))
         self.gps_mission_stored = True
+        # A denied index/start is reported; never auto-retry a flight command.
+        self._confirm_new_mission_ready()
         self.stop_stream()
         self.gps_epoch = self.home_started_at = time.monotonic()
         self.gps_finish_hold_requested_at = None

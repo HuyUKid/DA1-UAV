@@ -4,12 +4,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'pi'))
 
 from contextlib import contextmanager
 import json
+import socket
 from types import ModuleType, SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
-from deployment import validate_connection
-from pixhawk import Pixhawk
-from serial_lock import udp_ownership
+from flight.deployment import validate_connection
+from flight.pixhawk import Pixhawk
+from flight.serial_lock import udp_ownership
 
 
 @contextmanager
@@ -95,7 +96,10 @@ class TransportTests(unittest.TestCase):
         plugins['action'].return_value.arm.assert_not_called()
 
     def test_two_consoles_cannot_own_same_udp_endpoint(self):
-        endpoint = 'udpin://127.0.0.1:14540'
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+            probe.bind(('127.0.0.1', 0))
+            port = probe.getsockname()[1]
+        endpoint = f'udpin://127.0.0.1:{port}'
         with udp_ownership(endpoint):
             with self.assertRaisesRegex(RuntimeError, 'Another controller'):
                 with udp_ownership(endpoint):

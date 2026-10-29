@@ -1,6 +1,8 @@
 # Luồng điều khiển local NED và cách kiểm chứng
 
-Trang này mô tả nhánh `fly x y` theo local NED. Nhánh GPS A→B mới dùng
+Trang này mô tả nhánh thử kỹ thuật `fly x y` theo local NED. Luồng web
+chính dùng GPS A→B qua hai service; xem
+[PI_SERVICES.md](../controller/docs/PI_SERVICES.md). Nhánh GPS dùng
 PX4 Mission với `gps-plan`/`gps-start` và lệnh chung `pause`/`resume`/`cancel`;
 xem [WEB_GPS_MISSION.md](../controller/docs/WEB_GPS_MISSION.md). Hai nhánh
 dùng chung TAKEOFF/HOLD ban đầu; sau GPS Cancel có thể nhận A/B mới ngay
@@ -12,14 +14,15 @@ kèm **waypoint acceptance + dwell** để giám sát đích. PX4 vẫn chạy m
 trạng thái từ telemetry, không tạo PID hoặc setpoint vận tốc.
 
 Code nằm trong `controller/pi/`; test Pi ở `controller/tests/`.
-Trong HITL, console cũng chạy trên PC với `udpin://127.0.0.1:14540` qua
+Trong HITL, flight service chạy trên PC với `udpin://127.0.0.1:14540` qua
 bridge Gazebo giữ USB; profile `hitl` kiểm tra `SYS_HITL=1`. Với UAV thật,
-console chạy trên Pi qua cùng URI loopback khi MAVLink Router giữ USB;
+flight service chạy trên Pi qua cùng URI loopback khi MAVLink Router giữ USB;
 profile `hardware` kiểm tra `SYS_HITL=0`. FSM giống nhau ở hai môi trường.
-Chỉ một console/observer chiếm UDP 14540 trên cùng máy. Xem lệnh đầy đủ
-trong README và hướng dẫn UAV thật ở `controller/docs/HARDWARE_SETUP.md`.
-`pixhawk.py` chỉ giữ kết nối/telemetry; mọi lệnh bay đi qua FSM trong
-`offboard_control.py`. `validation.py` kiểm tra giá trị số dùng chung.
+Chỉ một flight service/console/observer chiếm UDP 14540 trên cùng máy.
+Các sơ đồ local NED bên dưới giải thích công cụ console, không phải API web.
+`controller/pi/flight/pixhawk.py` giữ kết nối/telemetry; mọi lệnh bay đi qua
+FSM trong `flight/offboard_control.py`. `flight/validation.py` kiểm tra
+giá trị số dùng chung.
 README gốc mô tả kiến trúc và lệnh nhanh; tài liệu này giữ bảng điều kiện,
 FSM, ngưỡng và quy trình xác nhận chi tiết. Offboard chuẩn không có ACK
 hoàn thành waypoint, nên `target_reached` là kết quả giám sát Pi.
@@ -79,8 +82,8 @@ khi đang bận bị từ chối rõ ràng, không lén chạy sau đó.
 | `pause` | Trong FLY/SETTLING: lưu đúng đích x/y/z, yêu cầu HOLD; chờ mode mới mới báo PAUSED |
 | `resume` | Chỉ từ PAUSED: gửi lại đúng đích đã lưu, prestream rồi OFFBOARD; không ARM lại |
 | `cancel` | Trong FLY/SETTLING/PAUSED: bỏ đích cũ và HOLD tại vị trí/độ cao hiện tại |
-| `return-home` | Sau TAKEOFF hoàn tất: về GPS điểm cất cánh ở độ cao hiện tại, rồi HOLD; không tự LAND |
-| `return-height` | Từ HOLD trên không: giữ x/y hiện tại, về độ cao TAKEOFF, rồi HOLD |
+| `return-home` | Sau TAKEOFF hoàn tất: GPS_PAUSED được Cancel trước; về GPS điểm cất cánh ở độ cao hiện tại, rồi HOLD; không tự LAND |
+| `return-height` | Từ HOLD trên không hoặc GPS_PAUSED sau Cancel xác nhận: giữ x/y hiện tại, về độ cao TAKEOFF, rồi HOLD |
 | `land` | Cùng MAV_CMD_NAV_LAND từ ARM trên đất hoặc lúc bay; theo dõi riêng ACK và mode |
 | `disarm` | Một lệnh dừng motor cưỡng bức cả trên đất và trên không, gọi API `Action.kill()` nội bộ |
 

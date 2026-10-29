@@ -11,6 +11,7 @@ dist/
 
 # Runtime recordings and simulation results
 session-logs/
+runtime/
 artifacts/
 *.log
 *.ulg

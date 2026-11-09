@@ -15,21 +15,18 @@ note over Flight_Service,Pixhawk_PX4: PX4 chạy EKF và mọi vòng điều khi
 Flight_Service->>Pixhawk_PX4: Kết nối MAVSDK, đọc SYS_HITL và telemetry
 Pixhawk_PX4-->>Flight_Service: mode, armed, landed, health, position
 Flight_Service->>IPC_Unix_Socket: Mở /run/uav/flight.sock hoặc /tmp/uav-flight.sock
-Control_Service->>MQTT_Broker: Kết nối TLS, subscribe command, đăng Last Will
+Control_Service->>MQTT_Broker: Kết nối TLS, subscribe lac/device/control
 Control_Service->>Log_JSONL: SERVICE_STARTED + MQTT_CONNECTED
 
 Người_vận_hành->>Web_Backend: Gửi nhiệm vụ và cất cánh
-Web_Backend->>MQTT_Broker: gps_start JSON v2 hoặc payload sáu trường legacy
-MQTT_Broker->>Control_Service: MQTT command, Retain phải OFF
-Control_Service->>Control_Service: Xếp hàng; kiểm tra schema, ID, thời hạn, tọa độ và giới hạn payload
+Web_Backend->>MQTT_Broker: payload control gồm sáu trường
+MQTT_Broker->>Control_Service: lac/device/control, Retain phải OFF
+Control_Service->>Control_Service: Xếp hàng; kiểm tra đủ trường, tọa độ và giới hạn payload
 
-alt Payload/ID không hợp lệ, hết hạn, retained hoặc trùng ID gần đây
+alt Payload không hợp lệ, retained hoặc trùng nội dung gần đây
     Control_Service->>Log_JSONL: COMMAND_REJECTED + lý do
-    Control_Service->>MQTT_Broker: ACK rejected
-    MQTT_Broker-->>Web_Backend: rejected
 else Lệnh hợp lệ
     Control_Service->>Log_JSONL: COMMAND_RECEIVED
-    Control_Service->>MQTT_Broker: ACK received
     Control_Service->>IPC_Unix_Socket: command gps_start
     IPC_Unix_Socket->>Flight_Service: request JSON nội bộ
     Flight_Service->>Flight_Service: gps_plan(A, B, height, speed)
@@ -38,15 +35,14 @@ else Lệnh hợp lệ
         Flight_Service-->>IPC_Unix_Socket: ok=false + lý do
         IPC_Unix_Socket-->>Control_Service: rejected response
         Control_Service->>Log_JSONL: COMMAND_REJECTED
-        Control_Service->>MQTT_Broker: ACK rejected
     else Kế hoạch được chấp nhận
         Flight_Service->>Flight_Service: gps_start()
         Flight_Service->>Pixhawk_PX4: TAKEOFF/OFFBOARD hoặc PX4 Mission theo FSM
         Flight_Service->>Log_JSONL: COMMAND_ACCEPTED + trạng thái sau lệnh
         Flight_Service-->>IPC_Unix_Socket: ok=true + plan/status
         IPC_Unix_Socket-->>Control_Service: accepted response
-        Control_Service->>MQTT_Broker: ACK accepted
-        note over Web_Backend,Pixhawk_PX4: accepted chỉ xác nhận yêu cầu đã được nhận xử lý; chưa xác nhận UAV đã tới A/B.
+        Control_Service->>Log_JSONL: COMMAND_ACCEPTED
+        note over Web_Backend,Pixhawk_PX4: Web không nhận ACK qua MQTT; status cục bộ và telemetry mới xác nhận tiến độ.
     end
 end
 
@@ -57,47 +53,38 @@ loop Giám sát trong khi bay
     Control_Service->>IPC_Unix_Socket: status định kỳ
     IPC_Unix_Socket->>Flight_Service: status request
     Flight_Service-->>Control_Service: flight status
-    Control_Service->>MQTT_Broker: retained /v2/state
-    Control_Service->>MQTT_Broker: /v2/event khi trạng thái thay đổi
-    Control_Service->>MQTT_Broker: retained /v2/health
-    MQTT_Broker-->>Web_Backend: state, event, health
+    Control_Service->>Log_JSONL: Trạng thái thay đổi và health Pi
 end
 
 alt Mission tới B
     Pixhawk_PX4-->>Flight_Service: mission finished + HOLD telemetry
     Flight_Service->>Flight_Service: GPS_COMPLETE khi telemetry xác nhận
-    Control_Service->>MQTT_Broker: state phase=GPS_COMPLETE
-    note over Web_Backend,Control_Service: Hiện chưa publish ACK completed; web phải đọc state/telemetry.
+    note over Web_Backend,Control_Service: Không publish kết quả; xem status qua client cục bộ và Gazebo/QGC.
 else Mission lỗi sau khi đã bắt đầu
     Flight_Service->>Log_JSONL: lỗi/phase thực tế
-    Control_Service->>MQTT_Broker: state/event có lỗi
-    note over Web_Backend,Control_Service: Hiện chưa publish ACK failed riêng.
+    Control_Service->>Log_JSONL: Lỗi IPC nếu có
 end
 
-alt Pause / Resume / Cancel / Return Home / Return Height
-    Web_Backend->>MQTT_Broker: command v2 có command_id mới và hạn dùng
-    MQTT_Broker->>Control_Service: command
-    Control_Service->>IPC_Unix_Socket: validated command
-    IPC_Unix_Socket->>Flight_Service: request
+alt Pause / Resume / Cancel / Return Home / Return Height từ terminal Pi
+    Người_vận_hành->>IPC_Unix_Socket: pi/flight/client.py gửi lệnh giám sát
+    IPC_Unix_Socket->>Flight_Service: request nội bộ
     Flight_Service->>Pixhawk_PX4: Action HOLD, Mission hoặc Offboard tương ứng
     Pixhawk_PX4-->>Flight_Service: ACK rồi telemetry mode/position mới
-    Flight_Service-->>Control_Service: accepted hoặc rejected
-    Control_Service->>MQTT_Broker: ACK + state/event
-else LAND
-    Web_Backend->>MQTT_Broker: land command v2
-    Control_Service->>IPC_Unix_Socket: land
+    Flight_Service-->>Người_vận_hành: trạng thái qua client
+else LAND từ terminal Pi
+    Người_vận_hành->>IPC_Unix_Socket: pi/flight/client.py land
+    IPC_Unix_Socket->>Flight_Service: land
     Flight_Service->>Pixhawk_PX4: MAV_CMD_NAV_LAND
     Pixhawk_PX4-->>Flight_Service: ACK, LAND, ON_GROUND, armed=false theo thời gian
-    Control_Service->>MQTT_Broker: ACK accepted rồi state cập nhật
-    note over Người_vận_hành,Pixhawk_PX4: Chờ ON_GROUND và armed=false; ACK accepted không phải xác nhận đã chạm đất.
+    note over Người_vận_hành,Pixhawk_PX4: Chờ ON_GROUND và armed=false qua status; phản hồi lệnh không xác nhận đã chạm đất.
 end
 
 alt MQTT tạm mất
     MQTT_Broker--xControl_Service: Mất liên kết
     Control_Service->>Log_JSONL: MQTT_DISCONNECTED
     Flight_Service->>Pixhawk_PX4: Tiếp tục giám sát trạng thái PX4 độc lập MQTT
-    note over Control_Service,Web_Backend: Chưa có outbox phát lại ACK/event sau khi nối lại.
+    note over Control_Service,Web_Backend: Kết nối lại để nhận control mới; không phát lại lệnh bay cũ.
 end
 
 note over Người_vận_hành,Log_JSONL: console.py là công cụ local NED riêng, không kết nối MQTT và không chạy cùng Flight Service trên cùng UART/UDP.
-note over Control_Service,Web_Backend: Camera, OTA, flight_id, ACK executing/completed/failed và QGC STATUSTEXT bridge chưa được triển khai đầy đủ.
+note over Control_Service,Web_Backend: Không có topic MQTT đầu ra; xem kết quả trong status và log cục bộ.

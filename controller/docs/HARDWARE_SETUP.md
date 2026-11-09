@@ -24,6 +24,13 @@ nhưng nạp overlay không tự khôi phục mọi giá trị đã từng sửa
 - IMU, compass, GPS, RC/joystick, safety, pin 6S và power module.
 - MAVLink USB/TELEM2, Offboard loss, RC loss, datalink loss, pin thấp,
   geofence và hành động khi Pi/router mất nguồn.
+- `FD_FAIL_P=60`, `FD_FAIL_R=60`, hai thời gian kích hoạt `0.3 s` và
+  `COM_LKDOWN_TKO=3 s` phải đọc lại trên đúng Pixhawk sau khi nạp overlay.
+  PX4 chỉ khóa motor khi pitch **hoặc** roll vượt 60° đủ lâu trong cửa sổ
+  cất cánh; đây không phải phép đo góc nghiêng tổng hợp hay quy tắc dừng
+  motor mọi lúc trên không. Sau cửa sổ này, hành vi failure detector còn
+  phụ thuộc cấu hình flight termination riêng của PX4. Xem
+  [tham chiếu tham số PX4 v1.17](https://docs.px4.io/v1.17/en/advanced_config/parameter_reference).
 - Tham số PID/hover của UAV thật; không dùng giá trị X500 HITL cho UAV
   5–6 kg, motor 3120-700 kV và cánh “12.45” khi chưa đo trên chính UAV.
 
@@ -31,6 +38,9 @@ Thử motor chỉ trên bàn và đã tháo cánh. Không dùng việc unit test
 để suy ra motor, cánh, cảm biến hoặc failsafe đã đúng. QGC cần hiện
 DISARM, ON_GROUND, preflight/arming check đạt và telemetry mới trước mọi
 thử nghiệm có chuyển động.
+Kiểm tra bằng HITL và quan sát QGC Messages/ULog trước khi bay thật;
+không thử làm lật UAV thật khi cánh đang lắp. Cơ chế PX4 chạy trên Pixhawk,
+không phụ thuộc MQTT/Pi còn kết nối.
 
 ## 2. Pi, USB và QGC
 
@@ -83,16 +93,13 @@ Nếu không đúng, sửa nguyên nhân trên phần cứng/tham số/kết n�
 
 Đường hai service phải qua thử HITL A→B, pause/resume, cancel, return-home,
 return-height, LAND và xác nhận disarmed bằng telemetry/ULog trước. Sau đó
-backend phải triển khai lệnh v2 có ID/hạn dùng và quyền MQTT thích hợp;
-payload sáu trường legacy không đủ chống phát lại qua reboot. Cần chạy thử
+topic `control` hiện chỉ có payload sáu trường, không có ID/hạn dùng từ
+backend và chưa đủ chống phát lại qua reboot. Cần chạy thử
 trên bàn với UAV thật đã tháo cánh, kiểm tra timeout, mất mạng/Pi/router,
 nguồn và đường tiếp quản độc lập.
 
 Chỉ sau các bước đó mới xem xét bật `--enable-actuation` cho profile
-`hardware` trong cấu hình vận hành riêng. Một ACK MQTT là xác nhận xử lý
-yêu cầu, không phải bằng chứng UAV đã tới B hoặc đã hạ cánh. Luôn đối
+`hardware` trong cấu hình vận hành riêng. Control Service không phát ACK MQTT;
+phản hồi IPC cũng không chứng minh UAV đã tới B hoặc đã hạ cánh. Luôn đối
 chiếu phase/mode/armed/landed trong status, QGC và ULog PX4. Log Pi
 ở thư mục `--log-dir`; QGC Messages và ULog là các nguồn độc lập.
-
-OTA cập nhật phần mềm Pi và flash firmware Pixhawk **chưa triển khai**.
-Không gửi URL/script/firmware qua MQTT để thực thi trên UAV thật.

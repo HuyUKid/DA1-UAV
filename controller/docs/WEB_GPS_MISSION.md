@@ -17,17 +17,15 @@ c:spd:0.5;c:height:3;c:startlat:47.3977760;c:startlong:8.5456050;c:endlat:47.397
 
 `startlat/startlong` là điểm A, `endlat/endlong` là điểm B. `height` là
 độ cao so với mốc cất cánh; `spd` là m/s. Control service chỉ nhận đúng
-sáu trường hợp lệ trong một payload, Retain OFF và phải được bật rõ
-`--allow-legacy-start`. Nó chuyển thành một lệnh `gps_start`: kiểm tra kế
+sáu trường hợp lệ trong một payload và Retain OFF. Nó chuyển thành một lệnh `gps_start`: kiểm tra kế
 hoạch bằng `gps_plan`, rồi gọi `gps_start`. Từ đất, PX4 TAKEOFF/HOLD trước
 khi bay A→B; từ HOLD trên không, nó bắt đầu chặng A→B theo điều kiện của
 FSM hiện tại. Kết thúc tại B là HOLD trên không, không tự LAND.
 
-Payload legacy không có `command_id`, hạn dùng hoặc các lệnh pause/LAND.
+Payload `control` không có `command_id`, hạn dùng hoặc các lệnh pause/LAND.
 Cùng payload được khử lặp khi ID của nó còn trong 4096 ID gần nhất của phiên
 control service, nhưng chưa có
-chống phát lại bền qua reboot. Do đó cờ legacy là đường thử có kiểm soát,
-không phải giao thức hoàn chỉnh cho UAV thật.
+chống phát lại bền qua reboot.
 
 ### Bay thẳng đứng tại chỗ
 
@@ -47,38 +45,13 @@ nên “giữ nguyên” được xác nhận theo tolerance chứ không phải
 bằng 0. Trường `gps_mission.plan.vertical_only=true` trong status xác nhận
 kế hoạch đã được phân loại đúng.
 
-## Giao thức v2 cho các nút điều khiển
+## Các lệnh giám sát ngoài web
 
-Topic nhận là `lac/<deviceID>/v2/command`. Mỗi bản tin JSON có `schema=2`,
-`command_id` duy nhất, `mission_id`, `issued_at_utc`, `expires_at_utc`,
-`type` và `params`. Ví dụ cấu trúc (thời gian cần tạo mới cho mỗi lần gửi):
-
-```json
-{
-  "schema": 2,
-  "command_id": "cmd-001",
-  "mission_id": "mission-001",
-  "issued_at_utc": "2026-10-29T02:00:00Z",
-  "expires_at_utc": "2026-10-29T02:00:10Z",
-  "type": "gps_start",
-  "params": {
-    "a": {"lat_deg": 47.397776, "lon_deg": 8.545605},
-    "b": {"lat_deg": 47.397810, "lon_deg": 8.545650},
-    "height_above_launch_m": 3.0,
-    "speed_m_s": 0.5
-  }
-}
-```
-
-| `type` | Hành động ở flight service | Kết quả phải quan sát tiếp |
-|---|---|---|
-| `gps_start` | `gps_plan` rồi `gps_start` | TAKEOFF → MISSION → GPS_COMPLETE/HOLD |
-| `pause` / `resume` | Dừng/tiếp tục mục tiêu đang hoạt động | PX4 HOLD/MISSION hoặc OFFBOARD đúng phase |
-| `cancel` | Bỏ mục tiêu và yêu cầu HOLD | HOLD tại chỗ; không LAND |
-| `return_home` | Về GPS đã lưu lúc TAKEOFF ở độ cao hiện tại | HOME_COMPLETE/HOLD; LAND riêng |
-| `return_height` | Về độ cao TAKEOFF tại vị trí ngang hiện tại | HOLD đúng độ cao; LAND riêng |
-| `land` | Yêu cầu PX4 LAND | LAND, sau đó ON_GROUND và disarmed |
-| `disarm` | Dừng motor cưỡng bức | Bắt buộc `params.confirm_force=true`; có thể làm UAV rơi |
+MQTT chỉ nhận một payload GPS qua `lac/<deviceID>/control`. Các lệnh
+`pause`, `resume`, `cancel`, `return-home`, `return-height`, `land` và
+`disarm` không còn topic MQTT; người vận hành dùng `pi/flight/client.py`
+qua Unix socket cục bộ. `disarm` là dừng motor khẩn cấp và có thể làm UAV
+rơi, không dùng thay LAND.
 
 `return_home` là Mission do Pi tạo tới GPS cất cánh; nó không gọi PX4 RTL.
 Sai số estimator tối đa 10 cm (và không quá vertical arrival tolerance) quanh
@@ -90,17 +63,23 @@ và A→B tối đa 10 m, độ cao GPS tối đa 3 m, tốc độ GPS tối đa
 không vượt `MPC_XY_VEL_MAX` trên PX4. Có thể đổi giới hạn khi khởi động
 flight service, nhưng không tự ý áp giá trị mô phỏng cho UAV thật.
 
-## ACK, trạng thái và nhật ký
+## Trạng thái và nhật ký
 
-Control service xuất `lac/<deviceID>/v2/ack`, `/state`, `/health` và
-`/availability`. ACK `received` nghĩa là đã nhận payload; `accepted` nghĩa
-là flight service đã nhận yêu cầu. **Chỉ status mới cho biết phase và
-telemetry hiện tại**; cả hai ACK đều không có nghĩa đã bay tới B hoặc hạ
-cánh. Log JSONL ở `--log-dir` giữ sự kiện lệnh và trạng thái trên máy chạy.
-QGC Messages và ULog PX4 là nguồn khác.
+Service chỉ subscribe `lac/<deviceID>/control`; nó không publish ACK, state,
+health, event hay availability lên MQTT. Xem `status` qua
+`pi/flight/client.py`, log JSONL ở `--log-dir`, QGC Messages và ULog PX4.
+Do không có topic phản hồi, web không thể xác nhận lệnh đã được nhận hay bay
+đến B chỉ bằng MQTT. Log `COMMAND_ACCEPTED` xác nhận flight service nhận
+yêu cầu; vị trí/phase mới xác nhận chuyến bay.
 
-Backend hiện mới được quan sát gửi payload legacy; chưa có bằng chứng nó
-publish command v2 hoặc subscribe các topic ACK/state. Hai service mới qua
+Nếu MQTT Explorer còn hiện `state`, `health` hoặc `availability`, đó có thể
+là bản tin retained của phiên cũ. Sau khi dừng service cũ, xóa retained
+message của đúng ba topic đó trên broker rồi kết nối lại MQTT Explorer;
+`ack`/`event` không retained sẽ hết khỏi cây sau khi kết nối lại. Không xóa
+`control` và luôn gửi lệnh bay với Retain OFF. Nếu các topic cũ xuất hiện lại,
+vẫn còn một bản service cũ đang chạy ở máy khác.
+
+Backend hiện gửi payload `control`; hai service mới qua
 unit test, chưa qua smoke test Web → MQTT → Gazebo/Pixhawk. Cách chạy thử và
 lệnh LAND cục bộ: [PI_SERVICES.md](PI_SERVICES.md). Đường MQTT chỉ đọc để
 kiểm tra payload vẫn có trong [`monitor.py`](../pi/control/monitor.py).

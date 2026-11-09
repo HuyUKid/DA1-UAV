@@ -1,4 +1,4 @@
-"""The legacy MQTT monitor accepts fields but cannot trigger a flight."""
+"""The MQTT control monitor accepts fields but cannot trigger a flight."""
 
 import sys
 import unittest
@@ -9,7 +9,7 @@ from control.monitor import parse_control, parse_controls
 
 
 class MqttMonitorTests(unittest.TestCase):
-    def test_accepts_six_legacy_fields(self):
+    def test_accepts_six_control_fields(self):
         for field, value in {
                 'startlat': 47.397776, 'startlong': 8.545605,
                 'endlat': 47.39781, 'endlong': 8.54565,

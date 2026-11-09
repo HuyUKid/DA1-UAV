@@ -37,6 +37,16 @@ class ParamProfileTests(unittest.TestCase):
                      'MPC_Z_VEL_MAX_DN', 'MPC_TKO_SPEED', 'MPC_LAND_SPEED'):
             self.assertEqual(sim[name], real[name])
 
+    def test_native_takeoff_flip_lockdown_matches_both_profiles(self):
+        for path in ('simulation/params/x500_hitl.params',
+                     'controller/params/hardware.params'):
+            profile = parse(path)
+            self.assertEqual(profile['FD_FAIL_P'], (60, 6))
+            self.assertEqual(profile['FD_FAIL_R'], (60, 6))
+            self.assertEqual(profile['FD_FAIL_P_TTRI'], (0.3, 9))
+            self.assertEqual(profile['FD_FAIL_R_TTRI'], (0.3, 9))
+            self.assertEqual(profile['COM_LKDOWN_TKO'], (3.0, 9))
+
 
 if __name__ == '__main__':
     unittest.main()

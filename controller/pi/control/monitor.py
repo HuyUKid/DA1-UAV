@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only monitor for legacy MQTT control fields, separate or bundled.
+"""Read-only monitor for MQTT control fields, separate or bundled.
 
 This process never opens MAVLink or sends a flight command. Receiving a
 six-field bundle here is not a flight ACK; the control service is the
@@ -27,14 +27,14 @@ DEVICE_ID = re.compile(r'[A-Za-z0-9_-]{1,64}\Z')
 
 
 def parse_control(payload):
-    """Return (field, value) for one supported legacy command, or raise."""
+    """Return (field, value) for one supported control field, or raise."""
     if isinstance(payload, bytes):
         payload = payload.decode('utf-8', errors='strict')
     if not isinstance(payload, str):
         raise ValueError('Payload must be UTF-8 text')
     match = MESSAGE.fullmatch(payload)
     if not match or match[1] not in FIELD_BOUNDS:
-        raise ValueError('Expected one legacy c:field:value; command')
+        raise ValueError('Expected one c:field:value; control field')
     field = match[1]
     try:
         value = float(match[2])

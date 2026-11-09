@@ -82,8 +82,7 @@ control service giữ MQTT và hỏi mật khẩu:
 ```bash
 cd ~/uav/current/controller
 .venv/bin/python pi/control/service.py --device-id uav01 \
-  --username MQTT_USER --flight-socket /tmp/uav-flight.sock \
-  --allow-legacy-start
+  --username MQTT_USER --flight-socket /tmp/uav-flight.sock
 ```
 
 Trước khi nhấn nút web, ở terminal thứ ba kiểm tra lệnh đọc và đường
@@ -98,5 +97,5 @@ Khi cần hạ cánh: `.venv/bin/python pi/flight/client.py land`. Chờ QGC
 và `status` xác nhận ON_GROUND, disarmed; lúc đó mới dừng Gazebo. Tránh
 gửi `disarm` cưỡng bức thay LAND. Luồng hai service mới chưa được thử
 end to end trên đúng PC/Pi/Pixhawk; bài HITL qua console trước đây không
-xác nhận đường MQTT/IPC mới. Xem [PI_SERVICES.md](PI_SERVICES.md) về topic
-ACK, trạng thái và log.
+xác nhận đường MQTT/IPC mới. Xem [PI_SERVICES.md](PI_SERVICES.md) về cách
+xem trạng thái và log.

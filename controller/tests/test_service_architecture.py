@@ -5,14 +5,13 @@ import sys
 import tempfile
 import threading
 import unittest
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'pi'))
 
 from control.config_manager import RuntimeConfig
-from control.protocol import parse_incoming, parse_legacy_web, parse_v2
+from control.protocol import parse_control
 from control.command_router import ControlRouter
 from control.service import RecentCommandIds
 from flight.commands import FlightCommandRouter
@@ -75,6 +74,15 @@ class LayoutBoundaryTests(unittest.TestCase):
         self.assertFalse(any(name == 'paho' or name.startswith('paho.')
                              or name.startswith('control.') for name in imports), imports)
 
+    def test_mqtt_uses_only_control_command_topic_without_v2_namespace(self):
+        mqtt_source = ''.join((PI_ROOT / relative).read_text() for relative in (
+            'control/service.py', 'control/mqtt_client.py', 'control/protocol.py'))
+        self.assertNotIn('/v2/', mqtt_source)
+        self.assertNotIn('allow-legacy-start', mqtt_source)
+        self.assertIn("control_topic = f'{base}/control'", mqtt_source)
+        self.assertNotIn('client.publish(', mqtt_source)
+        self.assertNotIn('will_set(', mqtt_source)
+
     def test_only_two_system_services_use_current_entry_points(self):
         units = sorted(path.name for path in SYSTEMD_ROOT.glob('*.service'))
         self.assertEqual(units, ['uav-control.service', 'uav-flight.service'])
@@ -88,36 +96,16 @@ class LayoutBoundaryTests(unittest.TestCase):
 
 
 class ProtocolTests(unittest.TestCase):
-    def test_legacy_web_button_becomes_one_atomic_gps_start(self):
-        command = parse_legacy_web(LEGACY)
+    def test_web_control_becomes_one_atomic_gps_start(self):
+        command = parse_control(LEGACY)
         self.assertEqual(command['type'], 'gps_start')
         self.assertEqual(command['params']['a']['lat_deg'], 47.397776)
         self.assertEqual(command['params']['b']['lon_deg'], 8.54565)
         self.assertEqual(command['params']['height_above_launch_m'], 3.0)
 
-    def test_v2_requires_ids_and_rejects_expired_command(self):
-        now = datetime.now(timezone.utc)
-        command = {'schema': 2, 'command_id': 'cmd-1', 'mission_id': 'mission-1',
-                   'issued_at_utc': (now - timedelta(seconds=2)).isoformat(),
-                   'expires_at_utc': (now + timedelta(seconds=8)).isoformat(),
-                   'type': 'land', 'params': {}}
-        self.assertEqual(parse_v2(json.dumps(command), now=now)['type'], 'land')
-        command['expires_at_utc'] = (now - timedelta(seconds=1)).isoformat()
-        with self.assertRaisesRegex(ValueError, 'expired'):
-            parse_v2(json.dumps(command), now=now)
-
-    def test_v2_rejects_null_ids_and_legacy_requires_explicit_opt_in(self):
-        now = datetime.now(timezone.utc)
-        command = {'schema': 2, 'command_id': None, 'mission_id': 'm1',
-                   'issued_at_utc': now.isoformat(),
-                   'expires_at_utc': (now + timedelta(seconds=5)).isoformat(),
-                   'type': 'land', 'params': {}}
-        with self.assertRaisesRegex(ValueError, 'command_id'):
-            parse_v2(json.dumps(command), now=now)
-        with self.assertRaisesRegex(ValueError, 'disabled'):
-            parse_incoming('legacy', LEGACY.encode())
-        self.assertEqual(parse_incoming('legacy', LEGACY.encode(), True)['type'],
-                         'gps_start')
+    def test_control_requires_exactly_six_fields(self):
+        with self.assertRaisesRegex(ValueError, 'exactly six fields'):
+            parse_control(b'c:spd:0.5;')
 
     def test_recent_command_ids_are_bounded_and_reject_duplicates(self):
         recent = RecentCommandIds(capacity=2)
@@ -168,7 +156,7 @@ class FlightRouterTests(unittest.TestCase):
 
     def test_web_gps_start_plans_then_starts(self):
         self.controller.gps_plan.return_value = {'leg_m': 5.0}
-        command = parse_legacy_web(LEGACY)
+        command = parse_control(LEGACY)
         result = self.router.handle({'op': 'command', 'command': command})
         self.assertTrue(result['ok'])
         self.controller.gps_plan.assert_called_once_with(
@@ -203,43 +191,36 @@ class FlightRouterTests(unittest.TestCase):
 
 
 class ControlRouterTests(unittest.TestCase):
-    def test_legacy_web_payload_crosses_ipc_to_gps_controller(self):
+    def test_web_control_payload_crosses_ipc_to_gps_controller(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             controller = Mock()
             controller.gps_plan.return_value = {'leg_m': 5.0}
             controller.status.return_value = {'phase': 'GPS_STARTING'}
-            with EventLog(root, 'flight-test') as flight_log, \
-                    EventLog(root, 'control-test') as control_log:
+            with EventLog(root, 'flight-test') as flight_log:
                 flight_router = FlightCommandRouter(controller, flight_log)
                 socket_path = root / 'flight.sock'
                 with RpcServer(socket_path, flight_router.handle) as server:
                     worker = threading.Thread(target=server.poll, kwargs={'timeout': 2})
                     worker.start()
-                    control_router = ControlRouter(RpcClient(socket_path),
-                                                   RuntimeConfig(root / 'config.json'),
-                                                   Mock(), control_log)
-                    result = control_router.dispatch(parse_legacy_web(LEGACY))
+                    control_router = ControlRouter(RpcClient(socket_path))
+                    result = control_router.dispatch(parse_control(LEGACY))
                     worker.join(timeout=2)
                 self.assertTrue(result['ok'])
                 self.assertFalse(worker.is_alive())
                 controller.gps_plan.assert_called_once()
                 controller.gps_start.assert_called_once()
 
-    def test_flight_command_is_forwarded_and_control_queries_stay_local(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            flight, metrics = Mock(), Mock()
-            flight.request.return_value = {'ok': True}
-            metrics.snapshot.return_value = {'cpu_percent': 1}
-            with EventLog(temporary, 'control-test') as events:
-                router = ControlRouter(flight, RuntimeConfig(Path(temporary) / 'config.json'),
-                                       metrics, events)
-                command = parse_legacy_web(LEGACY)
-                self.assertTrue(router.dispatch(command)['ok'])
-                flight.request.assert_called_once()
-                health = dict(command, type='health_get')
-                self.assertEqual(router.dispatch(health)['health']['cpu_percent'], 1)
-                flight.request.assert_called_once()
+    def test_only_validated_gps_command_is_forwarded(self):
+        flight = Mock()
+        flight.request.return_value = {'ok': True}
+        router = ControlRouter(flight)
+        command = parse_control(LEGACY)
+        self.assertTrue(router.dispatch(command)['ok'])
+        flight.request.assert_called_once()
+        with self.assertRaisesRegex(ValueError, 'Only the validated GPS'):
+            router.dispatch(dict(command, type='camera_status'))
+        flight.request.assert_called_once()
 
     def test_invalid_config_does_not_change_runtime_values(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -249,23 +230,6 @@ class ControlRouterTests(unittest.TestCase):
                 config.update({'state_interval_s': 2, 'health_interval_s': float('nan')})
             self.assertEqual(config.values, before)
             self.assertFalse(config.path.exists())
-
-    def test_debug_command_uses_level_and_supports_health_module(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            flight, metrics = Mock(), Mock()
-            with EventLog(temporary, 'control-test') as events:
-                router = ControlRouter(flight,
-                                       RuntimeConfig(Path(temporary) / 'config.json'),
-                                       metrics, events)
-                command = {'type': 'debug_set', 'command_id': 'debug-1',
-                           'params': {'module': 'health', 'level': 'DEBUG',
-                                      'duration_s': 30}}
-                response = router.dispatch(command)
-                self.assertEqual(response['debug']['level'], 'DEBUG')
-                with self.assertRaisesRegex(ValueError, 'level'):
-                    router.dispatch(dict(command, params={
-                        'module': 'health', 'enabled': True}))
-
 
 class ObservabilityTests(unittest.TestCase):
     def test_event_log_is_jsonl_and_host_metrics_have_required_columns(self):

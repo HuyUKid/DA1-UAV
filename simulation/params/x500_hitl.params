@@ -5,6 +5,8 @@
 # USB goes to Gazebo. TELEM2 assumes TX/RX/GND at 921600; FLOW_CTRL=0.
 # RC sticks disabled for terminal-only HITL; use ground-station heartbeat on PC.
 # Hover thrust, HIL actuator mapping and supply/safety breakers apply only to HITL.
+# PX4 native takeoff flip detection: roll/pitch >60 deg for 0.3 s within
+# COM_LKDOWN_TKO=3 s after takeoff requests motor lockdown.
 # Vehicle-Id Component-Id Name Value Type
 1	1	SYS_AUTOSTART	1001	6
 1	1	SYS_HITL	1	6
@@ -24,6 +26,11 @@
 1	1	HIL_ACT_FUNC3	103	6
 1	1	HIL_ACT_FUNC4	104	6
 1	1	MPC_USE_HTE	1	6
+1	1	FD_FAIL_P	60	6
+1	1	FD_FAIL_R	60	6
+1	1	FD_FAIL_P_TTRI	0.3	9
+1	1	FD_FAIL_R_TTRI	0.3	9
+1	1	COM_LKDOWN_TKO	3.0	9
 1	1	COM_OF_LOSS_T	0.5	9
 1	1	MPC_THR_HOVER	0.74	9
 1	1	MPC_XY_VEL_ALL	-1.0	9

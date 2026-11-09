@@ -478,7 +478,7 @@
         <mxCell id="sys_mqtt" value="MQTT Broker&#10;TLS + ACL&#10;lac/&lt;deviceID&gt;/..." style="rounded=1;whiteSpace=wrap;html=0;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=18;" vertex="1" parent="sys1">
           <mxGeometry x="380" y="180" width="220" height="120" as="geometry" />
         </mxCell>
-        <mxCell id="sys_control" value="Control Service&#10;MQTT, protocol, ACK/state/health&#10;config, camera/OTA capability&#10;Không mở MAVSDK" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=18;" vertex="1" parent="sys1">
+        <mxCell id="sys_control" value="Control Service&#10;MQTT chỉ nhận control&#10;log và health cục bộ&#10;Không mở MAVSDK" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=18;" vertex="1" parent="sys1">
           <mxGeometry x="660" y="155" width="280" height="170" as="geometry" />
         </mxCell>
         <mxCell id="sys_ipc" value="Unix socket IPC&#10;JSON có giới hạn&#10;/run/uav/flight.sock" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#f5f5f5;strokeColor=#666666;fontSize=18;" vertex="1" parent="sys1">
@@ -499,10 +499,10 @@
         <mxCell id="sys_console" value="console.py&#10;Công cụ thử local NED riêng&#10;không chạy cùng Flight Service&#10;không kết nối MQTT" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=17;" vertex="1" parent="sys1">
           <mxGeometry x="70" y="680" width="280" height="125" as="geometry" />
         </mxCell>
-        <mxCell id="sys_note" value="Hiện có: received / accepted / rejected. Chưa có ACK executing / completed / failed, flight_id, camera thật, OTA hay QGC STATUSTEXT bridge." style="rounded=1;whiteSpace=wrap;html=0;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=17;" vertex="1" parent="sys1">
+        <mxCell id="sys_note" value="Không publish MQTT; xem status qua client cục bộ và log JSONL." style="rounded=1;whiteSpace=wrap;html=0;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=17;" vertex="1" parent="sys1">
           <mxGeometry x="500" y="700" width="600" height="90" as="geometry" />
         </mxCell>
-        <mxCell id="sys_e1" edge="1" parent="sys1" source="sys_web" target="sys_mqtt" value="command / state" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=16;">
+        <mxCell id="sys_e1" edge="1" parent="sys1" source="sys_web" target="sys_mqtt" value="control" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=16;">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="sys_e2" edge="1" parent="sys1" source="sys_mqtt" target="sys_control" value="MQTT TLS" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=16;">

@@ -8,7 +8,7 @@ các quy ước dưới đây mô tả cấu trúc và hành vi đang dùng củ
 
 - [README.md](README.md): kiến trúc, triển khai Pi và lệnh vận hành.
 - [PI_SERVICES.md](controller/docs/PI_SERVICES.md): luồng web/MQTT, hai service,
-  IPC, ACK, log và mức độ kiểm chứng.
+  IPC, log và mức độ kiểm chứng.
 - [FLIGHT_STATES.md](docs/FLIGHT_STATES.md): FSM, điều kiện chuyển trạng thái,
   ACK, timeout và các trường status.
 - [SETUP.md](simulation/docs/SETUP.md): model X500, nguồn upstream và quy trình
@@ -22,7 +22,7 @@ chiếu với mã nguồn, test và dữ liệu thực tế khi sửa lỗi.
 
 | Thư mục | Nội dung |
 |---|---|
-| `controller/pi/control/` | MQTT, kiểm tra bản tin, ACK/state/health, cấu hình có allowlist |
+| `controller/pi/control/` | MQTT chỉ nhận `control`, kiểm tra bản tin, cấu hình có allowlist |
 | `controller/pi/flight/` | Một chủ MAVSDK/Pixhawk, FSM GPS/local NED, policy và validation |
 | `controller/pi/ipc/`, `observability/` | Socket nội bộ, JSONL log và metrics Pi |
 | `controller/pi/console.py` | Console kỹ thuật cho thử nghiệm terminal; không phải luồng web chính |
@@ -59,22 +59,22 @@ Phần `simulation/` phải có thể chép sang PC khác mà không cần code 
   PX4 RTL và không tự LAND.
   Mission GPS kết thúc ở B tại độ cao được chọn; chỉ `return-height` mới
   yêu cầu về độ cao TAKEOFF tại x/y hiện tại. Sau GPS Cancel, nhận `fly x y`.
-  Console vẫn cho phép thử trực tiếp các lệnh này. Service MQTT nhận sáu
-  trường trong cùng bản tin web legacy hoặc lệnh v2 và chưa được kiểm chứng
-  lại bằng chuyến bay web sau khi tách process.
+  Console vẫn cho phép thử trực tiếp các lệnh này. Service MQTT chỉ nhận sáu
+  trường trong cùng bản tin web `control` và chưa được kiểm chứng lại bằng
+  chuyến bay web sau khi tách process.
 - Luồng sản phẩm chính là web → MQTT → `control/service.py` → Unix IPC →
   `flight/service.py` → `flight/gps_mission.py`. Flight service là chủ MAVSDK duy
   nhất; callback MQTT không gọi MAVSDK. `fly x y` chỉ là công cụ local-NED thử
   nghiệm trong console và không được thêm vào API web.
-- Console không kết nối MQTT. Payload web legacy và JSON v2 đều phải đi qua
-  Control Service rồi IPC; không khôi phục nhánh console vừa MQTT vừa MAVSDK.
+- Console không kết nối MQTT. Payload web `control` phải đi qua Control
+  Service rồi IPC; không khôi phục nhánh console vừa MQTT vừa MAVSDK.
 - TAKEOFF/FLY khóa đích đang thực hiện. LAND/DISARM đi qua khóa đích khi
   console xử lý lệnh; không tuyên bố ưu tiên này là bảo đảm thời gian thực.
 - Một lệnh `disarm` hiện dùng force-stop cả trên đất và trên không, nội bộ
   gọi `Action.kill()`; có thể làm UAV rơi. Không âm thầm đổi nghĩa lệnh này.
 - LAND gửi yêu cầu hạ cánh trước teardown; giữ SDK/plugin trong đường LAND
   bình thường. Không dùng `Offboard.stop()` để thay thế LAND.
-- ACK không đồng nghĩa thực hiện xong. Chờ telemetry mới xác nhận mode,
+- Phản hồi IPC không đồng nghĩa thực hiện xong. Chờ telemetry mới xác nhận mode,
   armed và landed state; LAND/DISARM chỉ trả IDLE khi disarmed và ON_GROUND.
 - Dữ liệu cũ, NaN/Inf hoặc mẫu lặp không được hoàn thành dwell. Status có
   thể biểu diễn dữ liệu lỗi bằng null nhưng không sửa cache thành tọa độ 0.

@@ -73,8 +73,7 @@ class EventLog:
             return record
 
     def set_debug(self, module, enabled, duration_s=600):
-        if module not in {'mqtt', 'control', 'flight', 'pixhawk', 'camera',
-                          'ota', 'health'}:
+        if module not in {'mqtt', 'control', 'flight', 'pixhawk', 'health'}:
             raise ValueError('Unsupported debug module')
         if not isinstance(enabled, bool):
             raise ValueError('enabled must be boolean')

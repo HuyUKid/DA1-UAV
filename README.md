@@ -2,17 +2,16 @@
 
 Repository: [HuyUKid/DA1-UAV](https://github.com/HuyUKid/DA1-UAV).
 
-Luồng sản phẩm là web gửi nhiệm vụ GPS A→B qua MQTT. Một service trên
-Raspberry Pi giữ kết nối với broker, kiểm tra bản tin và gửi ACK/trạng thái;
-service bay riêng là tiến trình duy nhất nói chuyện với Pixhawk qua MAVSDK.
+Luồng sản phẩm là web gửi nhiệm vụ GPS A→B qua MQTT. Control Service trên
+PC hoặc Raspberry Pi chỉ nhận `lac/<deviceID>/control`, kiểm tra bản tin và
+chuyển lệnh qua socket nội bộ; Flight Service là tiến trình duy nhất nói
+chuyện với Pixhawk qua MAVSDK. Không có topic MQTT phản hồi.
 Pixhawk/PX4 chạy estimator và các vòng điều khiển bay. `fly x y` trong
 terminal là công cụ thử local NED, không phải lệnh web.
 
 ```text
-Web/backend → MQTT broker → control service → Unix socket → flight service → Pixhawk/PX4
-                                │                                │
-                           health + ACK                    GPS A→B + FSM
-                                └──────── log JSONL trên PC/Pi ────────┘
+Web/backend → MQTT broker → Control Service → Unix socket → Flight Service → Pixhawk/PX4
+                                 └────────── log JSONL và health cục bộ ───┘
 ```
 
 ## Phạm vi hiện tại
@@ -24,14 +23,14 @@ chứng cho service mới. Đừng bật service bay thật chỉ dựa trên un
 
 | Thành phần | Đường dẫn |
 |---|---|
-| MQTT, lọc bản tin, ACK, cấu hình và sức khỏe | [`controller/pi/control/`](controller/pi/control/) |
+| MQTT, kiểm tra lệnh GPS và health cục bộ | [`controller/pi/control/`](controller/pi/control/) |
 | Điều khiển GPS/FSM, một chủ MAVSDK | [`controller/pi/flight/`](controller/pi/flight/), [`gps_mission.py`](controller/pi/flight/gps_mission.py) |
 | Giao tiếp nội bộ và log | [`controller/pi/ipc/`](controller/pi/ipc/), [`observability/`](controller/pi/observability/) |
 | Tham số Pixhawk | [`simulation/params/x500_hitl.params`](simulation/params/x500_hitl.params), [`controller/params/hardware.params`](controller/params/hardware.params) |
 | Mô phỏng Gazebo Classic X500 | [`simulation/`](simulation/) |
 | Console kỹ thuật local NED | [`controller/pi/console.py`](controller/pi/console.py) |
 
-Chi tiết chức năng và các phần chưa hoàn thành: [PI_SERVICES.md](controller/docs/PI_SERVICES.md).
+Vai trò các file đang dùng: [PI_SERVICES.md](controller/docs/PI_SERVICES.md).
 Trạng thái thuật toán GPS: [WEB_GPS_MISSION.md](controller/docs/WEB_GPS_MISSION.md).
 
 ## Cài và mở mô phỏng HITL trên PC
@@ -85,23 +84,20 @@ mật khẩu được hỏi kín, không đặt trong command line):
 ```bash
 simulation/.venv/bin/python controller/pi/control/service.py \
   --device-id uav01 --username MQTT_USER \
-  --flight-socket /tmp/uav-flight.sock --allow-legacy-start
+  --flight-socket /tmp/uav-flight.sock
 ```
 
-`--allow-legacy-start` chỉ dành cho nút web hiện gửi sáu trường trong **một**
-payload `c:...;`. Retain phải OFF. Bỏ cờ này khi backend gửi lệnh JSON v2
-có `command_id` và hạn dùng. Control service công bố:
+Control service chỉ subscribe `lac/uav01/control`. Nút web phải gửi đủ sáu
+trường trong **một** payload `c:...;`, với Retain OFF. Service không publish
+topic nào dưới `lac/uav01`; trạng thái chỉ xem qua `flight/client.py status`,
+log và QGC. Trạng thái "mất kết nối" trên web sẽ không được cập nhật bởi
+service này vì không có topic phản hồi.
 
-- `lac/uav01/v2/ack`: đã nhận/chấp nhận/từ chối lệnh, chưa phải đã tới đích.
-- `lac/uav01/v2/state`: trạng thái hiện tại do Pixhawk/flight service báo.
-- `lac/uav01/v2/health`, `/event` và `/availability`: sức khỏe Pi, thay đổi
-  trạng thái và kết nối.
-
-Web hiện tại chưa chắc đã đọc các topic v2; nếu giao diện vẫn báo mất kết
-nối, xem MQTT Explorer và file `session-logs/services/*.jsonl`. Một payload
-legacy giống hệt bị chặn khi ID của nó còn trong 4096 ID gần nhất; sau
-restart chưa có chống phát lại bền. Web legacy hiện chưa có các nút
-Pause/Resume/LAND được xác minh. Mở console giám sát cục bộ qua cùng flight
+Nếu broker còn bản tin retained `state`, `health`, `availability` từ bản cũ,
+xóa chúng một lần; xem [hướng dẫn MQTT](controller/docs/WEB_GPS_MISSION.md).
+Một payload `control` giống hệt bị chặn khi ID của nó còn trong 4096 ID gần
+nhất của tiến trình; khởi động lại sẽ xóa danh sách này. Web hiện chỉ gửi
+nhiệm vụ GPS. Mở console giám sát cục bộ qua cùng flight
 service ở terminal khác:
 
 ```bash
@@ -110,7 +106,7 @@ simulation/.venv/bin/python controller/pi/flight/client.py
 
 Tại `UAV-REMOTE>` dùng `status`, `pause`, `resume`, `cancel`, `return-home`,
 `return-height` hoặc `land`. `disarm` gửi dừng motor khẩn cấp ngay, không có
-bước xác nhận thứ hai và có thể làm UAV rơi; không dùng thay LAND. `exit`/Ctrl+C không tự LAND. ACK không phải xác
+bước xác nhận thứ hai và có thể làm UAV rơi; không dùng thay LAND. `exit`/Ctrl+C không tự LAND. Phản hồi lệnh không xác
 nhận đã chạm đất; đợi ON_GROUND và DISARM trong `status`/QGC rồi mới dừng
 service và Gazebo.
 
@@ -127,14 +123,13 @@ Hướng dẫn dây/cổng và kiểm tra trên đất: [PI_HITL_REMOTE.md](cont
 [HARDWARE_SETUP.md](controller/docs/HARDWARE_SETUP.md). Mẫu systemd ở
 [`controller/systemd/`](controller/systemd/) mặc định mở flight service
 **chỉ đọc**; sau khi kiểm chứng mới cấu hình quyền điều khiển. `control`
-service cần vẫn giữ MQTT và báo lỗi nếu flight service tạm ngừng.
+service vẫn giữ MQTT và ghi lỗi cục bộ nếu flight service tạm ngừng.
 
 ## Nhật ký và kiểm thử
 
 Hai service lưu JSONL theo phiên trong thư mục `--log-dir`. PX4 ULog trên
-thẻ SD, QGC Messages và log Pi là ba nguồn khác nhau. Bản hiện tại chưa
-thu đủ pin/GPS/status text Pixhawk, chưa gộp thành một file cho mỗi chuyến
-bay, chưa có camera hoặc OTA. Xem [thiết kế quan sát](controller/docs/MQTT_OBSERVABILITY_DESIGN.md).
+thẻ SD, QGC Messages và log Pi là ba nguồn khác nhau. Mẫu sức khỏe Pi ghi
+cục bộ, trạng thái bay đọc bằng `flight/client.py status`.
 
 ```bash
 python3 -B -m unittest discover -s controller/tests -p 'test_*.py'

@@ -236,7 +236,9 @@ phiên bản. [PX4 HITL](https://docs.px4.io/v1.16/en/simulation/hitl).
    loopback. Baud/Onboard mode khớp README.
 2. Trong QGC, sao lưu tham số, nạp `simulation/params/x500_hitl.params`
    sau khi reset PX4 về defaults nếu thực hiện reset, reboot, đọc lại
-   `SYS_HITL=1` và các giới hạn. Xem gán HIL motor 1–4, RC và failsafe phù
+   `SYS_HITL=1` và các giới hạn. Overlay đặt rõ `FD_FAIL_P/R=60°`,
+   thời gian kích hoạt `0.3 s` và `COM_LKDOWN_TKO=3 s`: PX4 xử lý lật
+   trong cửa sổ cất cánh trên chính Pixhawk. Xem gán HIL motor 1–4, RC và failsafe phù
    hợp bài thử. Không vô hiệu hóa kiểm tra trên cấu hình bay thật để vượt lỗi HITL.
 3. Đóng QGC/USB AutoConnect trước khi Gazebo giữ USB. Khi mở lại QGC,
    dùng UDP do simulator forward, không giành lại cổng USB.
@@ -322,7 +324,7 @@ simulation/.venv/bin/python simulation/x500/launch.py --serial auto
 Service dùng `--profile hitl` theo README. Với web, kiểm tra lần lượt:
 payload GPS A→B → TAKEOFF/HOLD → MISSION → GPS_COMPLETE/HOLD → LAND →
 DISARM/ON_GROUND. Sau đó thử pause/resume, cancel, return-home và
-return-height bằng lệnh v2 khi backend hỗ trợ. Lệnh LAND cục bộ đi qua
+return-height bằng `flight/client.py` cục bộ. Lệnh LAND đi qua
 `flight/client.py`; không mở console thứ hai trên cùng UDP.
 Đối chiếu cả pose mô phỏng lẫn ước lượng PX4; một cờ tới đích trên Pi
 không thay thế kiểm tra chuyển động thực trong simulator.

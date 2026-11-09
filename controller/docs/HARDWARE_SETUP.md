@@ -18,12 +18,22 @@ hay tuning đã kiểm chứng. Xem cấu trúc và các phần còn thiếu t�
 Trước khi chuyển từ HITL về UAV thật, sao lưu và đọc lại toàn bộ tham số
 trên đúng Pixhawk/firmware. File `hardware.params` yêu cầu `SYS_HITL=0`,
 nhưng nạp overlay không tự khôi phục mọi giá trị đã từng sửa ở HITL.
+Trên cùng Pixhawk, phải đọc và cấu hình riêng `COM_OBL_RC_ACT`,
+`COM_OF_LOSS_T`, `MPC_THR_HOVER` và `MPC_USE_HTE` trước bay thật: đây là
+các giá trị có trong overlay HITL nhưng không có trong overlay thật, nên
+giá trị cũ có thể còn lưu trên bo. Không sao chép `MPC_THR_HOVER=0.74`
+của X500 sang UAV 5–6 kg nếu chưa đo/tuning trên chính UAV.
 Đối chiếu trong QGC:
 
 - Airframe Quad-X, AUX1–4/motor mapping, thứ tự và chiều quay motor, ESC.
 - IMU, compass, GPS, RC/joystick, safety, pin 6S và power module.
 - MAVLink USB/TELEM2, Offboard loss, RC loss, datalink loss, pin thấp,
   geofence và hành động khi Pi/router mất nguồn.
+- `EKF2_HGT_REF=0`, `EKF2_GPS_CTRL=5`: barometer là mốc độ cao, GPS vẫn
+  cung cấp vị trí ngang và vận tốc nhưng không hợp nhất độ cao GPS. Kiểm tra
+  `EKF2_BARO_CTRL=1` trên bo; overlay không ghi đè tham số này. Đây là lựa
+  chọn ứng viên, chưa kiểm chứng Z trên UAV thật; đối chiếu barometer, độ
+  cao và innovation trong ULog trước bay.
 - `FD_FAIL_P=60`, `FD_FAIL_R=60`, hai thời gian kích hoạt `0.3 s` và
   `COM_LKDOWN_TKO=3 s` phải đọc lại trên đúng Pixhawk sau khi nạp overlay.
   PX4 chỉ khóa motor khi pitch **hoặc** roll vượt 60° đủ lâu trong cửa sổ

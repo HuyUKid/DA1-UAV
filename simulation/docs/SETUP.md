@@ -236,7 +236,10 @@ phiên bản. [PX4 HITL](https://docs.px4.io/v1.16/en/simulation/hitl).
    loopback. Baud/Onboard mode khớp README.
 2. Trong QGC, sao lưu tham số, nạp `simulation/params/x500_hitl.params`
    sau khi reset PX4 về defaults nếu thực hiện reset, reboot, đọc lại
-   `SYS_HITL=1` và các giới hạn. Overlay đặt rõ `FD_FAIL_P/R=60°`,
+   `SYS_HITL=1`, `EKF2_HGT_REF=0`, `EKF2_GPS_CTRL=5` và các giới hạn.
+   Kiểm tra `EKF2_BARO_CTRL=1` trên bo; overlay không ghi đè tham số này.
+   Hai giá trị EKF này chọn barometer làm mốc độ cao và bỏ hợp nhất độ cao
+   GPS; cần kiểm tra lại Z trong ULog HITL sau khi nạp. Overlay đặt rõ `FD_FAIL_P/R=60°`,
    thời gian kích hoạt `0.3 s` và `COM_LKDOWN_TKO=3 s`: PX4 xử lý lật
    trong cửa sổ cất cánh trên chính Pixhawk. Xem gán HIL motor 1–4, RC và failsafe phù
    hợp bài thử. Không vô hiệu hóa kiểm tra trên cấu hình bay thật để vượt lỗi HITL.
@@ -268,6 +271,7 @@ và chạy test sau mỗi lần thay nguồn.
 
 `simulation/params/x500_hitl.params` chứa cấu hình HIL Quad-X, giao tiếp
 TELEM2 và giới hạn bay chậm đã thử trên Pixhawk/PX4 1.17.0 ngày 26/10.
+Hai giá trị EKF độ cao được thêm sau bài thử đó, chưa được xác nhận bằng bài bay HITL.
 Đặt `COM_RC_IN_MODE=4` cho bài kiểm tra PC qua terminal không có radio;
 flight service PC gửi heartbeat loại ground station. File cũng có hai breaker nguồn/
 safety phục vụ HITL và hover 0,74 chỉ đúng cho model X500. Reboot sau import,

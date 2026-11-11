@@ -26,9 +26,16 @@ của X500 sang UAV 5–6 kg nếu chưa đo/tuning trên chính UAV.
 Đối chiếu trong QGC:
 
 - Airframe Quad-X, AUX1–4/motor mapping, thứ tự và chiều quay motor, ESC.
-- IMU, compass, GPS, RC/joystick, safety, pin 6S và power module.
+- IMU, compass, GPS, MAVLink joystick, safety, pin 6S và power module.
+  Overlay đặt `COM_RC_IN_MODE=1`: PX4 không nhận tay điều khiển RC truyền
+  thống. Nếu joystick QGC đi qua Pi/router, mất Pi cũng làm mất đường
+  điều khiển đó; xác nhận phương án tiếp quản độc lập trước bay.
 - MAVLink USB/TELEM2, Offboard loss, RC loss, datalink loss, pin thấp,
   geofence và hành động khi Pi/router mất nguồn.
+- `MIS_TAKEOFF_ALT=2.0` trong overlay là độ cao cất cánh mặc định của PX4;
+  Pi cũng đặt TAKEOFF 2 m. Nạp overlay qua QGC, reboot và đọc lại giá trị
+  trên bo. `MIS_TAKEOFF_ALT` không phải ngưỡng tối thiểu của Return Home
+  có waypoint độ cao tường minh.
 - `EKF2_HGT_REF=0`, `EKF2_GPS_CTRL=5`: barometer là mốc độ cao, GPS vẫn
   cung cấp vị trí ngang và vận tốc nhưng không hợp nhất độ cao GPS. Kiểm tra
   `EKF2_BARO_CTRL=1` trên bo; overlay không ghi đè tham số này. Đây là lựa
@@ -69,15 +76,21 @@ Script router có sẵn ở [`run_hardware_router.sh`](../tools/run_hardware_rou
 cần thay IP PC và tên `/dev/ttyACM*` bằng giá trị thực tế. QGC qua router
 phụ thuộc Pi; khi Pi tắt, đường QGC đó cũng mất. Cần kiểm tra một đường
 tiếp quản độc lập trước bay thật.
+Hai unit systemd mẫu không tự khởi động router; nếu chạy service tự động,
+router phải hoạt động riêng và endpoint UDP 14540 phải có heartbeat trước
+khi mong đợi `status` kết nối được.
 
 ## 3. Cài code và xác minh chỉ đọc
 
-Đặt `controller/` hiện tại trong `~/uav/current/controller` trên Pi;
-trên Pi cài riêng venv và hai requirements:
+Đặt nội dung `controller/` hiện tại trong `~/uav-gps` trên Pi, đúng với
+đường dẫn của hai unit systemd mẫu. Cài hai requirements bằng venv tại đó:
 
 ```bash
-cd ~/uav/current/controller
-python3 -m venv .venv
+cd ~/uav-gps
+# Giữ venv đã có, kể cả symlink; chỉ tạo khi đường dẫn hoàn toàn chưa tồn tại.
+if [ ! -e .venv ] && [ ! -L .venv ]; then python3 -m venv .venv; fi
+test -x .venv/bin/python
+readlink -f .venv
 .venv/bin/python -m pip install -r pi/flight/requirements.txt -r pi/control/requirements.txt
 .venv/bin/python -B -m unittest discover -s tests -p 'test_*.py' -q
 ```

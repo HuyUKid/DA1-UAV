@@ -10,12 +10,12 @@ from flight.client import COMMANDS, build_request, interactive, main
 
 
 class FlightClientTests(unittest.TestCase):
-    def test_build_request_maps_terminal_names_to_web_commands(self):
+    def test_build_request_maps_terminal_names_to_local_commands(self):
         self.assertEqual(build_request('status'), {'op': 'status'})
         for terminal_name, command_type in COMMANDS.items():
             with self.subTest(command=terminal_name):
                 request = build_request(terminal_name)
-                self.assertEqual(request['op'], 'command')
+                self.assertEqual(request['op'], 'local_command')
                 self.assertEqual(request['command']['type'], command_type)
                 self.assertTrue(request['command']['command_id'].startswith('local-'))
                 self.assertEqual(request['command']['mission_id'], 'local-supervision')
@@ -43,6 +43,15 @@ class FlightClientTests(unittest.TestCase):
             command = client.return_value.request.call_args.args[0]['command']
             self.assertEqual(command['type'], 'disarm')
             self.assertEqual(command['params'], {'confirm_force': True})
+
+    def test_one_shot_fly_accepts_negative_ned_coordinate(self):
+        with patch('flight.client.RpcClient') as client, patch('builtins.print'):
+            client.return_value.request.return_value = {'ok': True}
+            self.assertEqual(main(['fly', '-4', '5']), 0)
+            request = client.return_value.request.call_args.args[0]
+            self.assertEqual(request['op'], 'local_command')
+            self.assertEqual(request['command']['params'],
+                             {'north_m': -4.0, 'east_m': 5.0})
 
     def test_interactive_sends_simple_commands_and_exit_does_not_land(self):
         client = Mock()

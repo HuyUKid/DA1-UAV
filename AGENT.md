@@ -25,7 +25,8 @@ chiếu với mã nguồn, test và dữ liệu thực tế khi sửa lỗi.
 | `controller/pi/control/` | MQTT chỉ nhận `control`, kiểm tra bản tin, cấu hình có allowlist |
 | `controller/pi/flight/` | Một chủ MAVSDK/Pixhawk, FSM GPS/local NED, policy và validation |
 | `controller/pi/ipc/`, `observability/` | Socket nội bộ, JSONL log và metrics Pi |
-| `controller/pi/console.py` | Console kỹ thuật cho thử nghiệm terminal; không phải luồng web chính |
+| `controller/pi/flight/client.py` | Terminal kỹ thuật qua Flight Service; không mở MAVSDK |
+| `controller/pi/console.py` | Công cụ kết nối trực tiếp, không chạy cùng Flight Service trên cùng cổng |
 | `controller/tests/` | Unit test phần Pi, dùng mock, không điều khiển thiết bị |
 | `controller/tools/` | Chẩn đoán Pi, build MAVSDK, phân tích ULog |
 | `controller/params/` | Overlay giao tiếp cho UAV thật |
@@ -59,15 +60,19 @@ Phần `simulation/` phải có thể chép sang PC khác mà không cần code 
   PX4 RTL và không tự LAND.
   Mission GPS kết thúc ở B tại độ cao được chọn; chỉ `return-height` mới
   yêu cầu về độ cao TAKEOFF tại x/y hiện tại. Sau GPS Cancel, nhận `fly x y`.
-  Console vẫn cho phép thử trực tiếp các lệnh này. Service MQTT chỉ nhận sáu
-  trường trong cùng bản tin web `control` và chưa được kiểm chứng lại bằng
-  chuyến bay web sau khi tách process.
+  Terminal `flight/client.py` gửi các lệnh này qua IPC tới cùng Flight Service
+  đang phục vụ web; không cần dừng service để thử NED/GPS. Service MQTT nhận sáu
+  trường trong cùng bản tin nhiệm vụ web `control` hoặc một trong năm nút
+  `d:pause`, `d:resume`, `d:abort`, `d:rtl`, `d:land` trên cùng topic.
+  Đường web này chưa được kiểm chứng lại bằng chuyến bay sau khi tách process.
 - Luồng sản phẩm chính là web → MQTT → `control/service.py` → Unix IPC →
   `flight/service.py` → `flight/gps_mission.py`. Flight service là chủ MAVSDK duy
   nhất; callback MQTT không gọi MAVSDK. `fly x y` chỉ là công cụ local-NED thử
   nghiệm trong console và không được thêm vào API web.
-- Console không kết nối MQTT. Payload web `control` phải đi qua Control
-  Service rồi IPC; không khôi phục nhánh console vừa MQTT vừa MAVSDK.
+- Client kỹ thuật không kết nối MQTT/MAVSDK. Payload web `control` phải đi
+  qua Control Service rồi IPC; `command` chỉ cho phép lệnh web, còn
+  `local_command` cho phép `arm`, `takeoff`, `fly`, `gps_plan`, `gps_start`
+  cùng các lệnh chung. Không mở console trực tiếp song song Flight Service.
 - TAKEOFF/FLY khóa đích đang thực hiện. LAND/DISARM đi qua khóa đích khi
   console xử lý lệnh; không tuyên bố ưu tiên này là bảo đảm thời gian thực.
 - Một lệnh `disarm` hiện dùng force-stop cả trên đất và trên không, nội bộ

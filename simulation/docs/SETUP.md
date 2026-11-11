@@ -312,9 +312,9 @@ console hoặc smoke test khác đồng thời trên UDP 14540. Nếu chép riê
 `simulation/`, đặt hai service ở Pi qua TELEM2; phần mô phỏng vẫn độc lập
 với code Pi.
 
-Bài bay HITL ngày 26/10 được đo qua console kỹ thuật, xem
-[kết quả](ALGORITHM_VALIDATION_2026-10-26.md). Hai service web mới cần
-smoke test riêng trước khi kết luận tương đương.
+Các phép đo HITL của model nằm trong
+[báo cáo kiểm chứng](ALGORITHM_VALIDATION_2026-10-26.md). Hai service web cần
+smoke test riêng trước khi kết luận đường điều khiển này hoạt động.
 
 ## Chạy và kiểm chứng luồng bay
 

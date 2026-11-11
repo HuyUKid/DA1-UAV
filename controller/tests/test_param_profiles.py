@@ -26,7 +26,8 @@ class ParamProfileTests(unittest.TestCase):
         self.assertEqual(sim['SYS_AUTOSTART'], (1001, 6))
         self.assertEqual(real['SYS_AUTOSTART'], (4001, 6))
         self.assertEqual(sim['COM_RC_IN_MODE'], (4, 6))
-        self.assertEqual(real['COM_RC_IN_MODE'], (3, 6))
+        self.assertEqual(real['COM_RC_IN_MODE'], (1, 6))
+        self.assertEqual(real['MIS_TAKEOFF_ALT'], (2.0, 9))
         for name in ('CBRK_SUPPLY_CHK', 'HIL_ACT_FUNC1',
                      'HIL_ACT_FUNC2', 'HIL_ACT_FUNC3', 'HIL_ACT_FUNC4'):
             self.assertNotEqual(sim[name][0], 0)

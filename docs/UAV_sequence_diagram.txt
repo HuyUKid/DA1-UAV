@@ -23,7 +23,7 @@ Web_Backend->>MQTT_Broker: payload control gồm sáu trường
 MQTT_Broker->>Control_Service: lac/device/control, Retain phải OFF
 Control_Service->>Control_Service: Xếp hàng; kiểm tra đủ trường, tọa độ và giới hạn payload
 
-alt Payload không hợp lệ, retained hoặc trùng nội dung gần đây
+alt Payload không hợp lệ hoặc retained
     Control_Service->>Log_JSONL: COMMAND_REJECTED + lý do
 else Lệnh hợp lệ
     Control_Service->>Log_JSONL: COMMAND_RECEIVED
@@ -46,6 +46,17 @@ else Lệnh hợp lệ
     end
 end
 
+opt Nút điều khiển từ web
+    Người_vận_hành->>Web_Backend: Tạm dừng / tiếp tục / hủy / về điểm cất cánh / LAND
+    Web_Backend->>MQTT_Broker: d:pause / d:resume / d:abort / d:rtl / d:land
+    MQTT_Broker->>Control_Service: lac/device/control, Retain OFF
+    Control_Service->>IPC_Unix_Socket: command tương ứng
+    IPC_Unix_Socket->>Flight_Service: request JSON nội bộ
+    Flight_Service->>Pixhawk_PX4: Gửi lệnh hợp lệ theo FSM
+    Flight_Service->>Log_JSONL: COMMAND_ACCEPTED hoặc COMMAND_REJECTED
+    note over Web_Backend,Flight_Service: Không có ACK MQTT cho web; kiểm tra status và telemetry mới.
+end
+
 loop Giám sát trong khi bay
     Pixhawk_PX4-->>Flight_Service: telemetry mới và tiến độ Mission
     Flight_Service->>Flight_Service: refresh FSM, kiểm tra phase/mode/armed/landed
@@ -66,7 +77,7 @@ else Mission lỗi sau khi đã bắt đầu
 end
 
 alt Pause / Resume / Cancel / Return Home / Return Height từ terminal Pi
-    Người_vận_hành->>IPC_Unix_Socket: pi/flight/client.py gửi lệnh giám sát
+    Người_vận_hành->>IPC_Unix_Socket: pi/flight/client.py gửi lệnh kỹ thuật
     IPC_Unix_Socket->>Flight_Service: request nội bộ
     Flight_Service->>Pixhawk_PX4: Action HOLD, Mission hoặc Offboard tương ứng
     Pixhawk_PX4-->>Flight_Service: ACK rồi telemetry mode/position mới
@@ -86,5 +97,5 @@ alt MQTT tạm mất
     note over Control_Service,Web_Backend: Kết nối lại để nhận control mới; không phát lại lệnh bay cũ.
 end
 
-note over Người_vận_hành,Log_JSONL: console.py là công cụ local NED riêng, không kết nối MQTT và không chạy cùng Flight Service trên cùng UART/UDP.
+note over Người_vận_hành,Log_JSONL: flight/client.py hỗ trợ ARM/TAKEOFF/NED/GPS qua cùng socket; console.py kết nối Pixhawk trực tiếp nên không chạy cùng Flight Service trên cùng UART/UDP.
 note over Control_Service,Web_Backend: Không có topic MQTT đầu ra; xem kết quả trong status và log cục bộ.

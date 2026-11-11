@@ -12,7 +12,7 @@ from flight.validation import number
 
 
 def distance_m(lat1, lon1, lat2, lon2):
-    """Great-circle distance, used as an input guard, not as path planning."""
+    """Great-circle distance for diagnostics, guards and return deadline."""
     a, b = math.radians(lat1), math.radians(lat2)
     da, db = b - a, math.radians(lon2 - lon1)
     h = math.sin(da / 2) ** 2 + math.cos(a) * math.cos(b) * math.sin(db / 2) ** 2
@@ -22,14 +22,15 @@ def distance_m(lat1, lon1, lat2, lon2):
 @dataclass(frozen=True)
 class GpsLimits:
     start_error_m: float = 5.0
-    max_leg_m: float = 10.0
+    max_leg_m: float | None = None
     max_height_m: float = 3.0
     max_speed_m_s: float = 0.5
     confirmation_s: float = 5.0
 
     def __post_init__(self):
         number(self.start_error_m, 'start_error_m', 0.5, 100)
-        number(self.max_leg_m, 'max_leg_m', 1, 10000)
+        if self.max_leg_m is not None:
+            number(self.max_leg_m, 'max_leg_m', 1, 10000)
         number(self.max_height_m, 'max_height_m', 1, 100)
         number(self.max_speed_m_s, 'max_speed_m_s', 0.1, 10)
         number(self.confirmation_s, 'confirmation_s', 1, 30)
@@ -135,14 +136,8 @@ class GpsMissionControl(OffboardControl):
             if home:
                 if self.launch_gps is None:
                     raise ValueError('Return-home requires saved launch GPS')
-                if distance_m(lat, lon, self.launch_gps['latitude_deg'],
-                              self.launch_gps['longitude_deg']) > (
-                        2 * self.gps_limits.max_leg_m + self.gps_limits.start_error_m):
-                    raise ValueError('Launch point exceeds configured return distance limit')
                 self._check_hold_altitude()
-                mission_min = number(self.param.get_param_float('MIS_TAKEOFF_ALT'),
-                                     'MIS_TAKEOFF_ALT', 0, 100)
-                self._return_home_altitude(rel, mission_min)
+                number(rel, 'return_relative_altitude_m', 0.5, 100)
             elif self.nav_min_ltr_alt > self.height:
                 raise ValueError('NAV_MIN_LTR_ALT exceeds the TAKEOFF height')
             self.gps_cancel()
@@ -150,22 +145,6 @@ class GpsMissionControl(OffboardControl):
                 raise RuntimeError('GPS cancel is pending; wait for GPS_CANCELLED/HOLD '
                                    'before retrying the return command')
         return speed_hint
-
-    def _return_home_altitude(self, relative_altitude_m, mission_min_m):
-        """Clamp estimator noise at the PX4 mission floor, reject a real climb.
-
-        Local-NED return-height and GLOBAL_POSITION_INT relative altitude do
-        not share an identical zero and both contain estimator noise.  Permit
-        at most 10 cm (and never more than the configured vertical arrival
-        tolerance), then explicitly request PX4's minimum mission altitude.
-        """
-        tolerance = min(self.policy.z_tolerance_m, 0.1)
-        if relative_altitude_m + tolerance < mission_min_m:
-            raise ValueError(
-                f'Return-home would force a climb: current relative altitude '
-                f'{relative_altitude_m:.2f} m is below MIS_TAKEOFF_ALT '
-                f'{mission_min_m:.2f} m beyond tolerance {tolerance:.2f} m')
-        return max(relative_altitude_m, mission_min_m)
 
     def _adopt_completed_gps_hold(self):
         """Hand a cancelled/completed GPS HOLD back to local NED control."""
@@ -248,9 +227,9 @@ class GpsMissionControl(OffboardControl):
             start_lon = end_lon = lon
             approach = leg = 0.0
         else:
-            if not 0.5 <= approach <= self.gps_limits.max_leg_m:
+            if self.gps_limits.max_leg_m is not None and approach > self.gps_limits.max_leg_m:
                 raise ValueError('Current-to-A leg is outside the configured distance limit')
-            if not 0.5 <= leg <= self.gps_limits.max_leg_m:
+            if self.gps_limits.max_leg_m is not None and leg > self.gps_limits.max_leg_m:
                 raise ValueError('A-to-B leg is outside the configured distance limit')
         self.gps_plan_data = dict(start_lat=start_lat, start_lon=start_lon,
                                   end_lat=end_lat, end_lon=end_lon,
@@ -304,7 +283,7 @@ class GpsMissionControl(OffboardControl):
 
     def _confirm_new_mission_ready(self):
         # Upload ACK can precede PX4 Commander seeing the replacement mission.
-        # This same sequence was exercised by return-home in HITL on 2026-10-29.
+        # Wait for PX4 Commander to register the replacement mission.
         time.sleep(1.0)
         self._in_air_hold()
         self.mission.set_current_mission_item(0)
@@ -319,7 +298,9 @@ class GpsMissionControl(OffboardControl):
         plan = self.gps_plan_data
         if distance_m(lat, lon, plan['origin_lat'], plan['origin_lon']) > self.gps_limits.start_error_m:
             raise ValueError('UAV moved away from plan origin since staging')
-        if distance_m(lat, lon, plan['start_lat'], plan['start_lon']) > self.gps_limits.max_leg_m:
+        if (self.gps_limits.max_leg_m is not None
+                and distance_m(lat, lon, plan['start_lat'], plan['start_lon'])
+                > self.gps_limits.max_leg_m):
             raise ValueError('Current-to-A distance exceeds configured limit')
         local = self.state('local_ned', self.policy.telemetry_max_age_s)
         current_above_launch = self.launch_ned['down_m'] - number(
@@ -328,11 +309,6 @@ class GpsMissionControl(OffboardControl):
         # altitude above this session's launch point using fresh PX4 estimates.
         target_rel = number(rel + plan['height_above_launch_m'] - current_above_launch,
                             'target_relative_altitude_m', 0.5, 100)
-        mission_takeoff_min = number(self.param.get_param_float('MIS_TAKEOFF_ALT'),
-                                     'MIS_TAKEOFF_ALT', 0, 100)
-        if target_rel < mission_takeoff_min:
-            raise ValueError('GPS cruise height is below PX4 MIS_TAKEOFF_ALT; '
-                             'mission could climb above the selected height')
         if plan.get('vertical_only'):
             items = [self._mission_item(plan['end_lat'], plan['end_lon'],
                                         target_rel, plan['speed_m_s'], loiter_time_s=1.0)]
@@ -377,15 +353,14 @@ class GpsMissionControl(OffboardControl):
         local = self.state('local_ned', self.policy.telemetry_max_age_s)
         distance = distance_m(lat, lon, self.launch_gps['latitude_deg'],
                               self.launch_gps['longitude_deg'])
-        if distance > 2 * self.gps_limits.max_leg_m + self.gps_limits.start_error_m:
-            raise ValueError('Launch point exceeds configured return distance limit')
         self._check_hold_altitude()
-        mission_min = number(self.param.get_param_float('MIS_TAKEOFF_ALT'),
-                             'MIS_TAKEOFF_ALT', 0, 100)
-        request_rel = self._return_home_altitude(rel, mission_min)
+        request_rel = number(rel, 'return_relative_altitude_m', 0.5, 100)
         speed = (speed_hint if speed_hint is not None else
                  self.gps_plan_data['speed_m_s'] if self.gps_plan_data is not None else
                  min(self.gps_limits.max_speed_m_s, self.px4_xy_vel_max))
+        # A fixed local-NED deadline would reject a valid long GPS return.
+        # Allow time for slowing, waypoint acceptance and wind corrections.
+        deadline_s = max(self.policy.target_timeout_s, 2 * distance / speed + 30)
         self.home_return_target = {
             'latitude_deg': self.launch_gps['latitude_deg'],
             'longitude_deg': self.launch_gps['longitude_deg'],
@@ -393,6 +368,7 @@ class GpsMissionControl(OffboardControl):
                 local['down_m'], 'down_m', -10000, 10000),
             'speed_m_s': speed,
             'distance_m': distance,
+            'deadline_s': deadline_s,
             'request_relative_altitude_m': request_rel,
         }
         self.gps_plan_data = None
@@ -412,17 +388,11 @@ class GpsMissionControl(OffboardControl):
         target = self.home_return_target
         if target is None:
             raise ValueError('Return-home target was lost')
-        if distance_m(lat, lon, target['latitude_deg'], target['longitude_deg']) > (
-                2 * self.gps_limits.max_leg_m + self.gps_limits.start_error_m):
-            raise ValueError('Launch point exceeds configured return distance limit')
         local = self.state('local_ned', self.policy.telemetry_max_age_s)
         current_height = self.launch_ned['down_m'] - number(
             local['down_m'], 'down_m', -10000, 10000)
         target_rel = number(rel + target['height_above_launch_m'] - current_height,
                             'return_relative_altitude_m', 0.5, 100)
-        mission_min = number(self.param.get_param_float('MIS_TAKEOFF_ALT'),
-                             'MIS_TAKEOFF_ALT', 0, 100)
-        target_rel = self._return_home_altitude(target_rel, mission_min)
         if self.gps_mission_stored:
             self.mission.clear_mission()
             self.gps_mission_stored = False
@@ -638,7 +608,8 @@ class GpsMissionControl(OffboardControl):
             return
         if (self.phase == 'GPS_RUNNING' and self.home_returning
                 and self.home_started_at is not None
-                and time.monotonic() - self.home_started_at > self.policy.target_timeout_s):
+                and time.monotonic() - self.home_started_at
+                > self.home_return_target['deadline_s']):
             self._gps_unconfirmed('Return-home target deadline exceeded')
             return
         if self.phase in {'GPS_STARTING', 'GPS_RESUME_REQUESTED'} and mode == 'MISSION':

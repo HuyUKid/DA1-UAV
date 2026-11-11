@@ -4,13 +4,14 @@
 # Import only after restoring/checking the real airframe, outputs, sensors and calibrations.
 # SYS_AUTOSTART=4001 is the pre-reset generic Quad-X airframe observed on this Pixhawk;
 # verify it matches the frame before importing. Reboot after import.
-# TELEM2 assumes TX/RX/GND at 921600; FLOW_CTRL=0. COM_RC_IN_MODE=3 allows RC/joystick.
+# TELEM2 assumes TX/RX/GND at 921600; FLOW_CTRL=0. COM_RC_IN_MODE=1 accepts MAVLink joystick only; RC receiver input is disabled.
 # HIL outputs and the supply-check breaker are cleared explicitly on return from HITL.
 # IO safety is intentionally omitted; configure it on the real aircraft in QGC.
 # No X500 hover/PID, HIL bypass, or HITL offboard-loss action is transferred.
 # A 6S cell count is supplied, but battery monitor/voltage/current scaling need setup.
 # Candidate EKF height choice: barometer reference, GPS horizontal position and
 # 3D velocity fusion without GPS altitude. Verify real barometer/height in ULog.
+# PX4 native Takeoff default is 2 m; Pi Offboard TAKEOFF defaults to 2 m too.
 # PX4 native takeoff flip detection: roll/pitch >60 deg for 0.3 s within
 # COM_LKDOWN_TKO=3 s after takeoff requests motor lockdown; not an in-flight kill rule.
 # This is not a ready-to-fly or complete post-reset configuration.
@@ -25,7 +26,8 @@
 1	1	MAV_1_FORWARD	0	6
 1	1	MAV_1_RATE	0	6
 1	1	SER_TEL2_BAUD	921600	6
-1	1	COM_RC_IN_MODE	3	6
+1	1	COM_RC_IN_MODE	1	6
+1	1	MIS_TAKEOFF_ALT	2.0	9
 1	1	CA_ROTOR_COUNT	4	6
 1	1	HIL_ACT_FUNC1	0	6
 1	1	HIL_ACT_FUNC2	0	6

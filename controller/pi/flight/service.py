@@ -26,7 +26,7 @@ def build_parser():
     parser.add_argument('--profile', choices=['hitl', 'hardware'], default='hitl')
     parser.add_argument('--system-id', type=int, default=1)
     parser.add_argument('--height', type=float, default=2.0)
-    parser.add_argument('--gps-max-leg', type=float, default=10.0)
+    parser.add_argument('--gps-max-leg', type=float, default=None)
     parser.add_argument('--gps-max-height', type=float, default=3.0)
     parser.add_argument('--gps-max-speed', type=float, default=0.5)
     parser.add_argument('--xy-tolerance', type=float, default=0.5)

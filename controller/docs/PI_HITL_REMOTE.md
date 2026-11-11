@@ -6,9 +6,9 @@ Web → MQTT → Pi/control service → Pi/flight service → TELEM2 Pixhawk
 ```
 
 Hướng dẫn này áp dụng khi Pi nối Pixhawk qua TELEM2; PC mô phỏng giữ USB.
-Web là luồng ra lệnh GPS A→B. Pi flight service là tiến trình duy nhất mở
-UART MAVLink. Console `fly x y` chỉ dùng cho thử kỹ thuật riêng, không chạy
-song song với flight service trên cùng UART.
+Web ra lệnh GPS A→B; terminal kỹ thuật `flight/client.py` có thêm NED/GPS.
+Pi Flight Service là tiến trình duy nhất mở UART MAVLink. Không mở
+`pi/console.py` trực tiếp song song trên cùng UART.
 
 ## Chuẩn bị
 
@@ -35,17 +35,20 @@ song song với flight service trên cùng UART.
    Từ máy PC, ví dụ:
 
    ```bash
-   ssh pi@192.168.50.1 'mkdir -p ~/uav/current/controller'
+   ssh pi@192.168.50.1 'mkdir -p ~/uav-gps'
    rsync -av --exclude='.venv/' --exclude='__pycache__/' \
      --exclude='session-logs/' controller/ \
-     pi@192.168.50.1:~/uav/current/controller/
+     pi@192.168.50.1:~/uav-gps/
    ```
 
 5. Trên Pi:
 
    ```bash
-   cd ~/uav/current/controller
-   python3 -m venv .venv
+   cd ~/uav-gps
+   # Giữ venv đã có, kể cả symlink; chỉ tạo khi đường dẫn hoàn toàn chưa tồn tại.
+   if [ ! -e .venv ] && [ ! -L .venv ]; then python3 -m venv .venv; fi
+   test -x .venv/bin/python
+   readlink -f .venv
    .venv/bin/python -m pip install -r pi/flight/requirements.txt -r pi/control/requirements.txt
    .venv/bin/python -B -m unittest discover -s tests -p 'test_*.py' -q
    ```
@@ -69,9 +72,9 @@ simulator đang giữ. Trên Pi, terminal 1 mở flight service (lệnh dưới 
 quyền bay, chỉ dùng trong bài HITL có giám sát):
 
 ```bash
-cd ~/uav/current/controller
+cd ~/uav-gps
 .venv/bin/python pi/flight/service.py --profile hitl \
-  --connection serial:///dev/ttyAMA0:921600 --height 2.5 \
+  --connection serial:///dev/ttyAMA0:921600 --height 2 \
   --gps-max-height 3 --gps-max-speed 0.5 \
   --socket /tmp/uav-flight.sock --enable-actuation
 ```
@@ -80,22 +83,25 @@ Thay `/dev/ttyAMA0` bằng đúng UART đã kiểm tra. Ở terminal 2 trên Pi,
 control service giữ MQTT và hỏi mật khẩu:
 
 ```bash
-cd ~/uav/current/controller
+cd ~/uav-gps
 .venv/bin/python pi/control/service.py --device-id uav01 \
   --username MQTT_USER --flight-socket /tmp/uav-flight.sock
 ```
 
-Trước khi nhấn nút web, ở terminal thứ ba kiểm tra lệnh đọc và đường
-LAND cục bộ qua IPC:
+Trước khi nhấn nút web, ở terminal thứ ba mở client kỹ thuật qua IPC:
 
 ```bash
-cd ~/uav/current/controller
-.venv/bin/python pi/flight/client.py status
+cd ~/uav-gps
+.venv/bin/python pi/flight/client.py
 ```
 
-Khi cần hạ cánh: `.venv/bin/python pi/flight/client.py land`. Chờ QGC
+Tại `UAV-REMOTE>` gõ `status` để kiểm tra trước. Sau đó có thể dùng `arm`,
+`takeoff`, `fly x y`,
+`gps-plan A_lat A_lon B_lat B_lon height speed`, `gps-start`, cùng các lệnh
+`pause`, `resume`, `cancel`, `return-home`, `return-height`, `land`.
+Chỉ terminal kỹ thuật có `arm`, `takeoff`, `fly x y`; web không nhận chúng.
+Khi cần hạ cánh: gõ `land` trong client. Chờ QGC
 và `status` xác nhận ON_GROUND, disarmed; lúc đó mới dừng Gazebo. Tránh
-gửi `disarm` cưỡng bức thay LAND. Luồng hai service mới chưa được thử
-end to end trên đúng PC/Pi/Pixhawk; bài HITL qua console trước đây không
-xác nhận đường MQTT/IPC mới. Xem [PI_SERVICES.md](PI_SERVICES.md) về cách
+gửi `disarm` cưỡng bức thay LAND. Luồng hai service chưa được thử
+end to end trên đúng PC/Pi/Pixhawk. Xem [PI_SERVICES.md](PI_SERVICES.md) về cách
 xem trạng thái và log.

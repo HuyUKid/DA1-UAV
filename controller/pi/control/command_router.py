@@ -1,4 +1,7 @@
-"""Forward the validated web GPS command to the sole Flight Service."""
+"""Forward validated web commands to the sole Flight Service."""
+
+
+WEB_COMMANDS = {'gps_start', 'pause', 'resume', 'cancel', 'return_home', 'land'}
 
 
 class ControlRouter:
@@ -8,6 +11,6 @@ class ControlRouter:
         self.flight = flight_client
 
     def dispatch(self, command):
-        if command.get('type') != 'gps_start':
-            raise ValueError('Only the validated GPS start command is supported')
+        if command.get('type') not in WEB_COMMANDS:
+            raise ValueError('Unsupported web command')
         return self.flight.request({'op': 'command', 'command': command})

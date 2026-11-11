@@ -15,6 +15,7 @@ from control.protocol import parse_control
 from control.command_router import ControlRouter
 from control.service import RecentCommandIds
 from flight.commands import FlightCommandRouter
+from flight.client import build_request
 from ipc.client import RpcClient
 from ipc.server import RpcServer
 from ipc.messages import encode, receive_line
@@ -74,6 +75,12 @@ class LayoutBoundaryTests(unittest.TestCase):
         self.assertFalse(any(name == 'paho' or name.startswith('paho.')
                              or name.startswith('control.') for name in imports), imports)
 
+    def test_local_client_does_not_open_mqtt_or_mavsdk(self):
+        imports = self._imports(PI_ROOT / 'flight/client.py')
+        self.assertFalse(any(name == 'paho' or name.startswith('paho.')
+                             or name == 'mavsdk' or name.startswith('mavsdk.')
+                             or name.startswith('control.') for name in imports), imports)
+
     def test_mqtt_uses_only_control_command_topic_without_v2_namespace(self):
         mqtt_source = ''.join((PI_ROOT / relative).read_text() for relative in (
             'control/service.py', 'control/mqtt_client.py', 'control/protocol.py'))
@@ -102,10 +109,28 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(command['params']['a']['lat_deg'], 47.397776)
         self.assertEqual(command['params']['b']['lon_deg'], 8.54565)
         self.assertEqual(command['params']['height_above_launch_m'], 3.0)
+        self.assertNotEqual(command['command_id'], parse_control(LEGACY)['command_id'])
 
     def test_control_requires_exactly_six_fields(self):
         with self.assertRaisesRegex(ValueError, 'exactly six fields'):
             parse_control(b'c:spd:0.5;')
+
+    def test_each_web_button_maps_to_existing_flight_operation(self):
+        expected = {'d:pause': 'pause', 'd:resume': 'resume',
+                    'd:rtl': 'return_home', 'd:land': 'land',
+                    'd:abort': 'cancel'}
+        for payload, kind in expected.items():
+            with self.subTest(payload=payload):
+                first = parse_control(payload.encode())
+                again = parse_control(payload.encode())
+                self.assertEqual(first['type'], kind)
+                self.assertEqual(first['params'], {})
+                self.assertNotEqual(first['command_id'], again['command_id'])
+
+    def test_unknown_web_button_is_rejected(self):
+        for payload in ('d:arm', 'd:takeoff', 'd:fly', 'd:disarm', 'd:kill', 'd:rtl-now'):
+            with self.subTest(payload=payload), self.assertRaises(ValueError):
+                parse_control(payload)
 
     def test_recent_command_ids_are_bounded_and_reject_duplicates(self):
         recent = RecentCommandIds(capacity=2)
@@ -169,11 +194,42 @@ class FlightRouterTests(unittest.TestCase):
                 'type': 'fly', 'command_id': 'x', 'mission_id': 'm', 'params': {}}})
         self.controller.fly.assert_not_called()
 
-    def test_remote_disarm_requires_explicit_force_confirmation(self):
+    def test_web_disarm_is_not_exposed_and_local_disarm_needs_confirmation(self):
         command = {'type': 'disarm', 'command_id': 'x', 'mission_id': 'm', 'params': {}}
-        with self.assertRaisesRegex(ValueError, 'confirm_force'):
+        with self.assertRaisesRegex(ValueError, 'Unsupported web flight'):
             self.router.handle({'op': 'command', 'command': command})
+        with self.assertRaisesRegex(ValueError, 'confirm_force'):
+            self.router.handle({'op': 'local_command', 'command': command})
         self.controller.disarm.assert_not_called()
+
+    def test_local_gps_plan_and_start_are_separate_operations(self):
+        self.controller.gps_plan.return_value = {'leg_m': 12.0}
+        plan_request = build_request('gps-plan 10 106 10.001 106.002 3 0.4')
+        result = self.router.handle(plan_request)
+        self.assertTrue(result['ok'])
+        self.assertEqual(result['result']['plan']['leg_m'], 12.0)
+        self.controller.gps_plan.assert_called_once_with(10.0, 106.0, 10.001, 106.002, 3.0, 0.4)
+        self.controller.gps_start.assert_not_called()
+        self.router.handle(build_request('gps-start'))
+        self.controller.gps_start.assert_called_once_with()
+        self.assertEqual(self.controller.gps_plan.call_count, 1)
+
+    def test_local_arm_takeoff_and_fly_dispatch_without_web_exposure(self):
+        for line, method in [('arm', 'arm'), ('takeoff', 'takeoff'), ('fly -4 5', 'fly')]:
+            with self.subTest(line=line):
+                request = build_request(line)
+                self.assertEqual(request['op'], 'local_command')
+                self.assertTrue(self.router.handle(request)['ok'])
+                getattr(self.controller, method).assert_called_once()
+                with self.assertRaisesRegex(ValueError, 'Unsupported web flight'):
+                    self.router.handle(dict(request, op='command'))
+        self.controller.fly.assert_called_once_with(-4.0, 5.0)
+
+    def test_local_command_rejects_missing_fly_coordinates(self):
+        with self.assertRaisesRegex(ValueError, 'north_m and east_m'):
+            self.router.handle({'op': 'local_command', 'command': {
+                'type': 'fly', 'command_id': 'x', 'params': {}}})
+        self.controller.fly.assert_not_called()
 
     def test_flight_debug_set_is_local_ipc_not_flight_actuation(self):
         response = self.router.handle({'op': 'debug_set', 'params': {
@@ -211,16 +267,76 @@ class ControlRouterTests(unittest.TestCase):
                 controller.gps_plan.assert_called_once()
                 controller.gps_start.assert_called_once()
 
-    def test_only_validated_gps_command_is_forwarded(self):
+    def test_only_supported_web_commands_are_forwarded(self):
         flight = Mock()
         flight.request.return_value = {'ok': True}
         router = ControlRouter(flight)
         command = parse_control(LEGACY)
         self.assertTrue(router.dispatch(command)['ok'])
         flight.request.assert_called_once()
-        with self.assertRaisesRegex(ValueError, 'Only the validated GPS'):
+        with self.assertRaisesRegex(ValueError, 'Unsupported web command'):
             router.dispatch(dict(command, type='camera_status'))
         flight.request.assert_called_once()
+
+    def test_web_buttons_reach_flight_controller_through_ipc(self):
+        mapping = {'d:pause': 'pause', 'd:resume': 'resume',
+                   'd:rtl': 'return_home', 'd:land': 'land',
+                   'd:abort': 'cancel'}
+        for payload, method in mapping.items():
+            with self.subTest(payload=payload), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                controller = Mock()
+                controller.status.return_value = {'phase': 'HOLD'}
+                with EventLog(root, 'flight-test') as flight_log:
+                    flight_router = FlightCommandRouter(controller, flight_log)
+                    socket_path = root / 'flight.sock'
+                    with RpcServer(socket_path, flight_router.handle) as server:
+                        worker = threading.Thread(target=server.poll, kwargs={'timeout': 2})
+                        worker.start()
+                        result = ControlRouter(RpcClient(socket_path)).dispatch(
+                            parse_control(payload))
+                        worker.join(timeout=2)
+                    self.assertTrue(result['ok'])
+                    self.assertFalse(worker.is_alive())
+                    getattr(controller, method).assert_called_once_with()
+
+    def test_local_client_and_web_use_the_same_flight_service_socket(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            controller = Mock()
+            controller.status.return_value = {'phase': 'HOLD'}
+            with EventLog(root, 'flight-test') as flight_log:
+                flight_router = FlightCommandRouter(controller, flight_log)
+                socket_path = root / 'flight.sock'
+                with RpcServer(socket_path, flight_router.handle) as server:
+                    worker = threading.Thread(target=lambda: (server.poll(2), server.poll(2)))
+                    worker.start()
+                    client = RpcClient(socket_path)
+                    local_result = client.request(build_request('fly 1,2'))
+                    web_result = ControlRouter(client).dispatch(parse_control('d:land'))
+                    worker.join(timeout=2)
+                self.assertFalse(worker.is_alive())
+                self.assertTrue(local_result['ok'])
+                self.assertTrue(web_result['ok'])
+                controller.fly.assert_called_once_with(1.0, 2.0)
+                controller.land.assert_called_once_with()
+
+
+class LocalClientTests(unittest.TestCase):
+    def test_client_parses_all_engineering_command_shapes(self):
+        for line, kind in [('arm', 'arm'), ('takeoff', 'takeoff'),
+                           ('fly 1 2', 'fly'), ('fly 1,2', 'fly'),
+                           ('gps-plan 10 106 10.001 106.002 3 0.4', 'gps_plan'),
+                           ('gps-start', 'gps_start'), ('return-height', 'return_height')]:
+            with self.subTest(line=line):
+                self.assertEqual(build_request(line)['command']['type'], kind)
+        self.assertEqual(build_request('status'), {'op': 'status'})
+
+    def test_client_rejects_nonfinite_and_malformed_coordinates(self):
+        for line in ('fly nan 1', 'fly 1', 'gps-plan 10 106 11 107 inf 0.4',
+                     'gps-plan 10 106 11 107 3', 'takeoff now'):
+            with self.subTest(line=line), self.assertRaises(ValueError):
+                build_request(line)
 
     def test_invalid_config_does_not_change_runtime_values(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -26,7 +26,7 @@ HELP = '''arm         ARM only on ground; motors may spin; no Offboard or climb
 takeoff     Start OFFBOARD climb; accepts separate ARM or arms from IDLE
 fly x y     Leave HOLD and fly to absolute local NED x/y (also: fly x,y)
 land        Request PX4 LAND
-return-home Return to takeoff GPS at current height, then HOLD; paused GPS is cancelled first; requires height >= MIS_TAKEOFF_ALT
+return-home Return to takeoff GPS at current height, then HOLD; paused GPS is cancelled first
 return-height Move vertically to TAKEOFF height at current x/y, then HOLD; paused GPS is cancelled first
 disarm      Force motors off on ground OR in flight; vehicle may fall
 gps-plan A_lat A_lon B_lat B_lon height speed  Stage two GPS waypoints
@@ -171,8 +171,8 @@ def main():
     parser.add_argument('--yaw-tolerance', type=float, default=10.0, help='Arrival yaw tolerance, degrees')
     parser.add_argument('--settle-time', type=float, default=2.0, help='Fresh in-tolerance dwell before HOLD, seconds')
     parser.add_argument('--target-timeout', type=float, default=60.0, help='Target deadline before HOLD, seconds')
-    parser.add_argument('--gps-max-leg', type=float, default=10.0,
-                        help='Maximum length of each current-to-A and A-to-B leg in metres')
+    parser.add_argument('--gps-max-leg', type=float, default=None,
+                        help='Optional maximum length of each GPS leg in metres; unset means no Pi distance cap')
     parser.add_argument('--gps-max-height', type=float, default=3.0,
                         help='Maximum height above launch in metres for a GPS mission')
     parser.add_argument('--gps-max-speed', type=float, default=0.5,

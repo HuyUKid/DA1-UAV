@@ -1,17 +1,15 @@
-"""Web flight command routing for the sole MAVSDK owner."""
+"""Web and local flight command routing for the sole MAVSDK owner."""
 
 WEB_FLIGHT_COMMANDS = {
-    'gps_start', 'pause', 'resume', 'cancel', 'return_home',
-    'return_height', 'land', 'disarm',
+    'gps_start', 'pause', 'resume', 'cancel', 'return_home', 'land',
+}
+LOCAL_FLIGHT_COMMANDS = WEB_FLIGHT_COMMANDS | {
+    'arm', 'takeoff', 'fly', 'gps_plan', 'return_height', 'disarm',
 }
 
 
 class FlightCommandRouter:
-    """Maps web-level commands to the existing flight controller API.
-
-    Local-NED ``fly x y`` is intentionally absent: it remains a console-only
-    engineering command and is not part of the web contract.
-    """
+    """Dispatches serialized flight requests on the sole MAVSDK owner thread."""
 
     def __init__(self, controller, event_log):
         self.controller = controller
@@ -29,7 +27,7 @@ class FlightCommandRouter:
             return (a['lat_deg'], a['lon_deg'], b['lat_deg'], b['lon_deg'],
                     params['height_above_launch_m'], params['speed_m_s'])
         except (KeyError, TypeError):
-            raise ValueError('gps_start requires a/b lat_deg/lon_deg, height and speed') from None
+            raise ValueError('GPS plan requires a/b lat_deg/lon_deg, height and speed') from None
 
     def handle(self, request):
         if not isinstance(request, dict):
@@ -47,7 +45,8 @@ class FlightCommandRouter:
             return {'ok': True, 'debug': {'module': params['module'],
                                           'level': params['level'],
                                           'duration_s': params.get('duration_s', 600)}}
-        if request.get('op') != 'command':
+        operation = request.get('op')
+        if operation not in {'command', 'local_command'}:
             raise ValueError('Unsupported IPC operation')
         command = request.get('command')
         if not isinstance(command, dict):
@@ -55,15 +54,30 @@ class FlightCommandRouter:
         kind = command.get('type')
         command_id = command.get('command_id')
         mission_id = command.get('mission_id')
-        if kind not in WEB_FLIGHT_COMMANDS:
-            raise ValueError(f'Unsupported web flight command: {kind}')
+        allowed = LOCAL_FLIGHT_COMMANDS if operation == 'local_command' else WEB_FLIGHT_COMMANDS
+        if kind not in allowed:
+            raise ValueError(f'Unsupported {"local" if operation == "local_command" else "web"} '
+                             f'flight command: {kind}')
         self.log.write('COMMAND_REQUESTED', f'{kind} requested', command_id=command_id,
-                       mission_id=mission_id, command_type=kind)
+                       mission_id=mission_id, command_type=kind, source=operation)
         try:
             if kind == 'gps_start':
+                if operation != 'command':
+                    self.controller.gps_start()
+                    result = {}
+                else:
+                    plan = self.controller.gps_plan(*self._mission_values(command.get('params', {})))
+                    self.controller.gps_start()
+                    result = {'plan': plan}
+            elif kind == 'gps_plan':
                 plan = self.controller.gps_plan(*self._mission_values(command.get('params', {})))
-                self.controller.gps_start()
                 result = {'plan': plan}
+            elif kind == 'fly':
+                params = command.get('params')
+                if not isinstance(params, dict) or set(params) != {'north_m', 'east_m'}:
+                    raise ValueError('fly requires north_m and east_m')
+                self.controller.fly(params['north_m'], params['east_m'])
+                result = {}
             elif kind == 'disarm':
                 if command.get('params', {}).get('confirm_force') is not True:
                     raise ValueError('disarm requires params.confirm_force=true; it may stop motors in flight')
@@ -81,13 +95,14 @@ class FlightCommandRouter:
                                command_type=kind)
             self.log.write('COMMAND_ACCEPTED', f'{kind} accepted by controller',
                            command_id=command_id, mission_id=mission_id,
-                           command_type=kind,
+                           command_type=kind, source=operation,
                            phase_after=status.get('phase') if status else None)
             return {'ok': True, 'result': result, 'status': status}
         except Exception as error:
             self.log.write('COMMAND_REJECTED', str(error), severity='WARNING',
                            command_id=command_id, mission_id=mission_id,
-                           command_type=kind, error_type=type(error).__name__)
+                           command_type=kind, source=operation,
+                           error_type=type(error).__name__)
             raise
 
     def poll_state(self):

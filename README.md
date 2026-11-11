@@ -7,19 +7,20 @@ PC hoặc Raspberry Pi chỉ nhận `lac/<deviceID>/control`, kiểm tra bản t
 chuyển lệnh qua socket nội bộ; Flight Service là tiến trình duy nhất nói
 chuyện với Pixhawk qua MAVSDK. Không có topic MQTT phản hồi.
 Pixhawk/PX4 chạy estimator và các vòng điều khiển bay. `fly x y` trong
-terminal là công cụ thử local NED, không phải lệnh web.
+terminal là công cụ thử local NED, không phải lệnh web. Terminal kỹ thuật
+`flight/client.py` và web cùng gửi yêu cầu tới **một** Flight Service;
+không cần mở `console.py` trực tiếp để thử NED/GPS.
 
 ```text
 Web/backend → MQTT broker → Control Service → Unix socket → Flight Service → Pixhawk/PX4
-                                 └────────── log JSONL và health cục bộ ───┘
+                       Terminal kỹ thuật ────────┘
 ```
 
 ## Phạm vi hiện tại
 
-Code hai service đã có cùng unit test bằng mock. Luồng mới **chưa được thử
-end to end** bằng Web → MQTT → hai service → Gazebo HITL → Pixhawk và chưa
-bay thật. Bài HITL GPS trước đây dùng console riêng; không coi đó là bằng
-chứng cho service mới. Đừng bật service bay thật chỉ dựa trên unit test.
+Code hai service đã có unit test bằng mock. Luồng Web → MQTT → hai service →
+Gazebo HITL → Pixhawk **chưa được thử end to end** và chưa bay thật.
+Unit test không xác nhận đường điều khiển bay trên thiết bị.
 
 | Thành phần | Đường dẫn |
 |---|---|
@@ -28,7 +29,7 @@ chứng cho service mới. Đừng bật service bay thật chỉ dựa trên un
 | Giao tiếp nội bộ và log | [`controller/pi/ipc/`](controller/pi/ipc/), [`observability/`](controller/pi/observability/) |
 | Tham số Pixhawk | [`simulation/params/x500_hitl.params`](simulation/params/x500_hitl.params), [`controller/params/hardware.params`](controller/params/hardware.params) |
 | Mô phỏng Gazebo Classic X500 | [`simulation/`](simulation/) |
-| Console kỹ thuật local NED | [`controller/pi/console.py`](controller/pi/console.py) |
+| Terminal kỹ thuật NED/GPS qua Flight Service | [`controller/pi/flight/client.py`](controller/pi/flight/client.py) |
 
 Vai trò các file đang dùng: [PI_SERVICES.md](controller/docs/PI_SERVICES.md).
 Trạng thái thuật toán GPS: [WEB_GPS_MISSION.md](controller/docs/WEB_GPS_MISSION.md).
@@ -74,7 +75,7 @@ có giám sát trực tiếp và đã xác nhận bo đang DISARM:
 ```bash
 simulation/.venv/bin/python controller/pi/flight/service.py \
   --profile hitl --connection udpin://127.0.0.1:14540 \
-  --height 2.5 --gps-max-height 3 --gps-max-speed 0.5 \
+  --height 2 --gps-max-height 3 --gps-max-speed 0.5 \
   --socket /tmp/uav-flight.sock --enable-actuation
 ```
 
@@ -87,25 +88,25 @@ simulation/.venv/bin/python controller/pi/control/service.py \
   --flight-socket /tmp/uav-flight.sock
 ```
 
-Control service chỉ subscribe `lac/uav01/control`. Nút web phải gửi đủ sáu
-trường trong **một** payload `c:...;`, với Retain OFF. Service không publish
+Control service chỉ subscribe `lac/uav01/control`. Nút nhiệm vụ web gửi đủ sáu
+trường trong **một** payload `c:...;`; các nút điều khiển gửi `d:pause`,
+`d:resume`, `d:abort`, `d:rtl` hoặc `d:land`, với Retain OFF. Service không publish
 topic nào dưới `lac/uav01`; trạng thái chỉ xem qua `flight/client.py status`,
 log và QGC. Trạng thái "mất kết nối" trên web sẽ không được cập nhật bởi
 service này vì không có topic phản hồi.
 
-Nếu broker còn bản tin retained `state`, `health`, `availability` từ bản cũ,
-xóa chúng một lần; xem [hướng dẫn MQTT](controller/docs/WEB_GPS_MISSION.md).
-Một payload `control` giống hệt bị chặn khi ID của nó còn trong 4096 ID gần
-nhất của tiến trình; khởi động lại sẽ xóa danh sách này. Web hiện chỉ gửi
-nhiệm vụ GPS. Mở console giám sát cục bộ qua cùng flight
+Pi gán ID mới cho từng bản tin nhận được; web hiện chưa gửi ID hay hạn dùng
+để chống phát lại bản tin. Mở terminal kỹ thuật qua cùng flight
 service ở terminal khác:
 
 ```bash
 simulation/.venv/bin/python controller/pi/flight/client.py
 ```
 
-Tại `UAV-REMOTE>` dùng `status`, `pause`, `resume`, `cancel`, `return-home`,
-`return-height` hoặc `land`. `disarm` gửi dừng motor khẩn cấp ngay, không có
+Tại `UAV-REMOTE>` dùng `status`, `arm`, `takeoff`, `fly x y`,
+`gps-plan A_lat A_lon B_lat B_lon height speed`, `gps-start`, `pause`,
+`resume`, `cancel`, `return-home`, `return-height` hoặc `land`.
+`gps-plan` chỉ lưu kế hoạch; `gps-start` mới triển khai. `disarm` gửi dừng motor khẩn cấp ngay, không có
 bước xác nhận thứ hai và có thể làm UAV rơi; không dùng thay LAND. `exit`/Ctrl+C không tự LAND. Phản hồi lệnh không xác
 nhận đã chạm đất; đợi ON_GROUND và DISARM trong `status`/QGC rồi mới dừng
 service và Gazebo.
@@ -137,7 +138,5 @@ python3 -B -m unittest discover -s simulation/tests -p 'test_*.py'
 python3 simulation/x500/check_setup.py --static
 ```
 
-Các bài này không ARM hoặc mở phiên bay. Báo cáo HITL cũ và dữ liệu gốc
-nằm tại [ALGORITHM_VALIDATION_2026-10-26.md](simulation/docs/ALGORITHM_VALIDATION_2026-10-26.md)
-và `logs/2026-10-24/`; đó là bằng chứng lịch sử của phiên console/model,
-không thay thế smoke test hai service hiện tại.
+Các bài này không ARM hoặc mở phiên bay. Kết quả mô phỏng và log đã ghi
+được lưu riêng trong `simulation/docs/` và `logs/`.

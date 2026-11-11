@@ -40,7 +40,7 @@ class Pixhawk:
         self.phase = 'IDLE'
         self.takeoff_complete = False
         self.operation_at = 0.0
-        # A console running on the PC is the GCS; serial Pi control is a companion.
+        # PC HITL over UDP acts as a GCS; serial Pi control is a companion.
         component = (ComponentType.GROUND_STATION
                      if profile == 'hitl' and connection.startswith('udpin://')
                      else ComponentType.COMPANION_COMPUTER)

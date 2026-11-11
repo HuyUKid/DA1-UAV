@@ -3,8 +3,8 @@
 Luồng chính: web/backend gửi MQTT, [control service](../pi/control/service.py)
 kiểm tra lệnh, [flight service](../pi/flight/service.py) gọi
 [`GpsMissionControl`](../pi/flight/gps_mission.py) trên một kết nối MAVSDK với PX4.
-Tọa độ web là vĩ độ/kinh độ. Lệnh `fly x y` của console dùng mét local NED
-và không thuộc giao thức web.
+Tọa độ web là vĩ độ/kinh độ. Lệnh `fly x y` của terminal kỹ thuật
+`flight/client.py` dùng mét local NED và không thuộc giao thức web.
 
 ## Payload web hiện tại
 
@@ -22,10 +22,21 @@ hoạch bằng `gps_plan`, rồi gọi `gps_start`. Từ đất, PX4 TAKEOFF/HOL
 khi bay A→B; từ HOLD trên không, nó bắt đầu chặng A→B theo điều kiện của
 FSM hiện tại. Kết thúc tại B là HOLD trên không, không tự LAND.
 
-Payload `control` không có `command_id`, hạn dùng hoặc các lệnh pause/LAND.
-Cùng payload được khử lặp khi ID của nó còn trong 4096 ID gần nhất của phiên
-control service, nhưng chưa có
-chống phát lại bền qua reboot.
+Payload `control` không có `command_id` hoặc hạn dùng do backend cấp.
+Pi tạo ID riêng cho mỗi bản tin nhận được, nên có thể gửi lại cùng một
+nhiệm vụ sau khi nhiệm vụ trước hoàn tất. Retain phải OFF; giao thức hiện
+không có cơ chế chống phát lại bản tin cũ do backend gửi lại.
+
+Các nút web dùng **cùng topic** `lac/<deviceID>/control`, mỗi lần bấm gửi
+một payload riêng: `d:pause` → tạm dừng; `d:resume` → tiếp tục;
+`d:abort` → hủy đích hiện tại và HOLD tại chỗ; `d:rtl` → trở về GPS
+điểm cất cánh ở độ cao hiện tại rồi HOLD; `d:land` → yêu cầu PX4 LAND.
+Không dùng Retain. `d:rtl` yêu cầu nhiệm vụ đang chạy đã hoàn tất hoặc đã
+`d:abort` và PX4 xác nhận HOLD; khi GPS đang PAUSED, lệnh này tự hủy
+nhiệm vụ cũ rồi kiểm tra HOLD. `d:abort` trong TAKEOFF bị từ chối vì chưa
+có chặng GPS để hủy;
+`d:land` vẫn là lệnh hạ cánh ưu tiên. Các lệnh chỉ được nhận theo phase và
+telemetry hiện hành, không bảo đảm hoàn thành chỉ nhờ ACK MQTT/IPC.
 
 ### Bay thẳng đứng tại chỗ
 
@@ -45,23 +56,35 @@ nên “giữ nguyên” được xác nhận theo tolerance chứ không phải
 bằng 0. Trường `gps_mission.plan.vertical_only=true` trong status xác nhận
 kế hoạch đã được phân loại đúng.
 
-## Các lệnh giám sát ngoài web
+## Các lệnh giám sát cục bộ
 
-MQTT chỉ nhận một payload GPS qua `lac/<deviceID>/control`. Các lệnh
-`pause`, `resume`, `cancel`, `return-home`, `return-height`, `land` và
-`disarm` không còn topic MQTT; người vận hành dùng `pi/flight/client.py`
-qua Unix socket cục bộ. `disarm` là dừng motor khẩn cấp và có thể làm UAV
+Terminal `pi/flight/client.py` có thêm `arm`, `takeoff`, `fly x y`,
+`gps-plan`, `gps-start`, `return-height`, `disarm` và các lệnh chung
+`pause`, `resume`, `cancel`, `return-home`, `land` qua cùng Unix socket.
+`return-height`
+hiện không có nút web. `disarm` là dừng motor khẩn cấp và có thể làm UAV
 rơi, không dùng thay LAND.
 
 `return_home` là Mission do Pi tạo tới GPS cất cánh; nó không gọi PX4 RTL.
-Sai số estimator tối đa 10 cm (và không quá vertical arrival tolerance) quanh
-`MIS_TAKEOFF_ALT` được kẹp lên đúng mức tối thiểu khi tạo Return Home; độ cao
-thấp hơn ngưỡng này vẫn bị từ chối để tránh một lần leo cao ngoài dự kiến.
-Các lệnh còn phải qua điều kiện phase, GPS mới, health, độ cao/tốc độ và
-giới hạn chặng trong `GpsMissionControl`. Mặc định hiện tại: chặng hiện tại→A
-và A→B tối đa 10 m, độ cao GPS tối đa 3 m, tốc độ GPS tối đa 0,5 m/s và
-không vượt `MPC_XY_VEL_MAX` trên PX4. Có thể đổi giới hạn khi khởi động
-flight service, nhưng không tự ý áp giá trị mô phỏng cho UAV thật.
+MissionItem đặt độ cao rõ ràng từ ước lượng hiện tại nên `MIS_TAKEOFF_ALT`
+(độ cao cất cánh mặc định của PX4) không được dùng làm ngưỡng tối thiểu
+cho lệnh này. `return-height` dùng Offboard để về độ cao TAKEOFF mặc định
+2 m tại x/y hiện tại; nó chỉ báo hoàn thành khi telemetry đạt tolerance.
+File overlay thật `controller/params/hardware.params` cũng đặt
+`MIS_TAKEOFF_ALT=2.0` cho PX4 native Takeoff; sửa file không tự thay giá trị
+trên Pixhawk, cần nạp qua QGC và đọc lại tham số sau reboot.
+
+Mặc định Pi **không giới hạn khoảng cách** hiện tại→A, A→B hoặc quãng về
+điểm cất cánh. Tùy chọn `--gps-max-leg` cho phép bật giới hạn khi cần.
+Deadline Return Home được tính từ quãng đường GPS tới Home và tốc độ lệnh:
+`max(target_timeout_s, 2 × distance_m / speed_m_s + 30 s)`; không còn mốc
+60 s cố định cho đường về dài. Đây là hạn giám sát của Pi, không bảo đảm
+đủ pin hoặc khả năng bay tới Home.
+Ngưỡng 5 m `start_error_m` vẫn kiểm tra UAV không rời khỏi vị trí lúc lập
+kế hoạch trước khi bắt đầu. Độ cao nhiệm vụ GPS mặc định từ 2 đến 3 m,
+tốc độ 0,1–0,5 m/s và không vượt `MPC_XY_VEL_MAX` trên PX4. Có thể đổi
+giới hạn độ cao/tốc độ khi khởi động flight service; PX4 vẫn có geofence,
+battery failsafe và các kiểm tra bay riêng.
 
 ## Trạng thái và nhật ký
 
@@ -71,13 +94,6 @@ health, event hay availability lên MQTT. Xem `status` qua
 Do không có topic phản hồi, web không thể xác nhận lệnh đã được nhận hay bay
 đến B chỉ bằng MQTT. Log `COMMAND_ACCEPTED` xác nhận flight service nhận
 yêu cầu; vị trí/phase mới xác nhận chuyến bay.
-
-Nếu MQTT Explorer còn hiện `state`, `health` hoặc `availability`, đó có thể
-là bản tin retained của phiên cũ. Sau khi dừng service cũ, xóa retained
-message của đúng ba topic đó trên broker rồi kết nối lại MQTT Explorer;
-`ack`/`event` không retained sẽ hết khỏi cây sau khi kết nối lại. Không xóa
-`control` và luôn gửi lệnh bay với Retain OFF. Nếu các topic cũ xuất hiện lại,
-vẫn còn một bản service cũ đang chạy ở máy khác.
 
 Backend hiện gửi payload `control`; hai service mới qua
 unit test, chưa qua smoke test Web → MQTT → Gazebo/Pixhawk. Cách chạy thử và

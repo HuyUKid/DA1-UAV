@@ -475,7 +475,7 @@
         <mxCell id="sys_web" value="Web / Backend&#10;GPS A→B, pause, resume, cancel, return, land" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=18;" vertex="1" parent="sys1">
           <mxGeometry x="70" y="180" width="250" height="120" as="geometry" />
         </mxCell>
-        <mxCell id="sys_mqtt" value="MQTT Broker&#10;TLS + ACL&#10;lac/&lt;deviceID&gt;/..." style="rounded=1;whiteSpace=wrap;html=0;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=18;" vertex="1" parent="sys1">
+        <mxCell id="sys_mqtt" value="MQTT Broker&#10;TLS + ACL&#10;lac/&lt;deviceID&gt;/control" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=18;" vertex="1" parent="sys1">
           <mxGeometry x="380" y="180" width="220" height="120" as="geometry" />
         </mxCell>
         <mxCell id="sys_control" value="Control Service&#10;MQTT chỉ nhận control&#10;log và health cục bộ&#10;Không mở MAVSDK" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=18;" vertex="1" parent="sys1">
@@ -493,10 +493,13 @@
         <mxCell id="sys_obs" value="Observability dùng chung&#10;JSONL event log + Pi metrics&#10;xuất CSV/JSONL" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=18;" vertex="1" parent="sys1">
           <mxGeometry x="720" y="445" width="300" height="135" as="geometry" />
         </mxCell>
+        <mxCell id="sys_client" value="flight/client.py&#10;Terminal kỹ thuật NED/GPS&#10;dùng chung Flight Service" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=17;" vertex="1" parent="sys1">
+          <mxGeometry x="1000" y="445" width="220" height="135" as="geometry" />
+        </mxCell>
         <mxCell id="sys_qgc" value="QGroundControl&#10;PX4 telemetry / Vehicle Messages&#10;không subscribe MQTT" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=18;" vertex="1" parent="sys1">
           <mxGeometry x="1280" y="680" width="260" height="120" as="geometry" />
         </mxCell>
-        <mxCell id="sys_console" value="console.py&#10;Công cụ thử local NED riêng&#10;không chạy cùng Flight Service&#10;không kết nối MQTT" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=17;" vertex="1" parent="sys1">
+        <mxCell id="sys_console" value="console.py&#10;Công cụ thử trực tiếp riêng&#10;không chạy cùng Flight Service&#10;không kết nối MQTT" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=17;" vertex="1" parent="sys1">
           <mxGeometry x="70" y="680" width="280" height="125" as="geometry" />
         </mxCell>
         <mxCell id="sys_note" value="Không publish MQTT; xem status qua client cục bộ và log JSONL." style="rounded=1;whiteSpace=wrap;html=0;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=17;" vertex="1" parent="sys1">
@@ -524,6 +527,9 @@
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="sys_e8" edge="1" parent="sys1" source="sys_px4" target="sys_qgc" value="telemetry" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=16;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="sys_e9" edge="1" parent="sys1" source="sys_client" target="sys_ipc" value="local_command / status" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=16;">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
       </root>

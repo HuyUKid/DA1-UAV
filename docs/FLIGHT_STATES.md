@@ -121,10 +121,8 @@ Quy trình hiện tại:
 5. Yêu cầu native HOLD, chờ mode mới. Hết deadline yêu cầu HOLD với
    `target_reached=false`; không tự gửi lại hoặc tiếp tục đích quá hạn.
 
-Đã bổ sung bốn test hồi quy dùng mock: nhiều chặng từ mốc ban đầu khác 0
-không cộng dồn x/y/z; khóa tọa độ qua FLY/SETTLING/chờ HOLD; đi qua rồi
-vượt khỏi vùng đích không hoàn thành dwell; timeout FLY không báo thành
-công hoặc tự thử lại.
+Unit test dùng mock kiểm tra nhiều chặng từ mốc ban đầu khác 0, khóa đích,
+dwell và timeout; kết quả không thay cho quỹ đạo HITL hoặc bay thật.
 
 **Đúng đích gửi không đồng nghĩa bảo đảm không vượt đích khi bay thật.**
 Khoảng ±10000 m là giới hạn giá trị đầu vào, không phải giới hạn chiều
@@ -153,6 +151,11 @@ Các mặc định là cấu hình phần mềm để thử có kiểm soát, ch
 đã xác thực cho UAV thật. Tolerance không bảo đảm sai số vật lý bằng giá
 trị đó. Nếu GPS/EKF trôi, cờ tới đích vẫn có thể sai so với vị trí thực.
 Không nới tolerance để che lỗi la bàn/IMU trong các log hiện có.
+
+`--target-timeout` áp dụng cho TAKEOFF và local NED FLY. GPS A→B không có
+deadline quãng bay cố định trên Pi; Return Home dùng deadline theo quãng
+đường/tốc độ lệnh, tối thiểu bằng `--target-timeout`. Xem
+[WEB_GPS_MISSION.md](../controller/docs/WEB_GPS_MISSION.md).
 
 `status.target_error_ned_m` hiển thị sai lệch có dấu theo north/east/down
 (vị trí ước lượng trừ đích) cả khi đang bay tới đích và sau khi vào HOLD.
@@ -184,13 +187,9 @@ MAVSDK tự ngừng setpoint khi heartbeat cho biết rời OFFBOARD. Không dù
 
 Native PX4 Hold cần global position hợp lệ. `NAV_MIN_LTR_ALT` có thể nâng
 UAV lên độ cao tối thiểu; Pi đọc tham số và chặn yêu cầu HOLD có nguy cơ
-nâng không mong muốn, chuyển sang yêu cầu LAND. Các log hiện có ghi -1.
-Không tự sửa tham số PX4. Cần xác nhận lại giá trị thực và health trên bo.
+nâng không mong muốn, chuyển sang yêu cầu LAND. Cần xác nhận lại giá trị
+thực và health trên bo.
 
-Các log ghi `COM_DISARM_PRFLT=10`, `COM_SPOOLUP_TIME=1`,
-`COM_DISARM_LAND=2`, `COM_OF_LOSS_T=1`, `COM_OBL_RC_ACT=0`, không có RC và
-đã chuyển RTL khi mất Offboard. Auto-disarm trước TAKEOFF có tính cả
-spool-up; không dùng việc motor dừng làm bằng chứng LAND đã thực hiện.
 `NAV_ACC_RAD`/`NAV_MC_ALT_RAD` là tham số navigator, không tự thay các
 tolerance giám sát Offboard trên Pi.
 
@@ -252,8 +251,6 @@ NaN/Inf trong bản status được biểu diễn bằng `null` và liệt kê t
 
 Không yêu cầu x/y/z bằng 0 trước bay. Xác nhận hướng/yaw, vị trí và cao độ
 ổn định trên QGC cùng telemetry Pi, xử lý cảnh báo compass/IMU trước ARM.
-Thông tin log cũ và việc Pi đèn đỏ nằm trong
-[báo cáo ngày 24/10](../logs/2026-10-24/BAO_CAO_2026-10-24.md).
 
 ## Native MAVSDK trên Pi
 
@@ -264,7 +261,8 @@ sudo apt install build-essential cmake git pkg-config libssl-dev zlib1g-dev libl
 bash tools/build_mavsdk_pi.sh
 ```
 
-Script dùng `controller/.venv/bin/python`, build đúng tag MAVSDK 4.0.6,
+Script dùng `.venv/bin/python` trong `controller/` trên PC hoặc
+`~/uav-gps` trên Pi, build đúng tag MAVSDK 4.0.6,
 kiểm tra liên kết, sao lưu `.so` cũ rồi kiểm tra khởi tạo/cleanup native.
 Nếu khởi tạo lỗi, script phục hồi thư viện cũ. Có thể chỉ định
 `MAVSDK_PYTHON` nếu venv ở nơi khác. Script không kết nối Pixhawk hay ARM.

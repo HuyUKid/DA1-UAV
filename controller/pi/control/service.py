@@ -97,7 +97,7 @@ def main(argv=None):
         connection.subscribe(control_topic, qos=0)
         print(f'MQTT connected successfully: {args.host}:{args.port}', flush=True)
         print(f'Subscribed: {control_topic}', flush=True)
-        print('Six-field GPS control: ENABLED', flush=True)
+        print('Six-field GPS control and d: button commands: ENABLED', flush=True)
         events.write('MQTT_CONNECTED', 'Connected and subscribed')
 
     def on_disconnect(connection, userdata, disconnect_flags, reason_code, properties):

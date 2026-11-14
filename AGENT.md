@@ -64,7 +64,9 @@ Phần `simulation/` phải có thể chép sang PC khác mà không cần code 
   đang phục vụ web; không cần dừng service để thử NED/GPS. Service MQTT nhận sáu
   trường trong cùng bản tin nhiệm vụ web `control` hoặc một trong năm nút
   `d:pause`, `d:resume`, `d:abort`, `d:rtl`, `d:land` trên cùng topic.
-  Đường web này chưa được kiểm chứng lại bằng chuyến bay sau khi tách process.
+  Đường web qua hai service đã được thử trong HITL trên PC ngày 11/11/2026;
+  xem `controller/docs/WEB_HITL_2026-11-11.md`. Đường Pi UART chưa được thử
+  với bản mã này.
 - Luồng sản phẩm chính là web → MQTT → `control/service.py` → Unix IPC →
   `flight/service.py` → `flight/gps_mission.py`. Flight service là chủ MAVSDK duy
   nhất; callback MQTT không gọi MAVSDK. `fly x y` chỉ là công cụ local-NED thử

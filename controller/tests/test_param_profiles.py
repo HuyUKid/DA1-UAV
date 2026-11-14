@@ -2,12 +2,17 @@
 from pathlib import Path
 import unittest
 
-ROOT = Path(__file__).resolve().parents[2]
+CONTROLLER = Path(__file__).resolve().parents[1]
+SIM_PROFILE = CONTROLLER.parent / 'simulation/params/x500_hitl.params'
+if not SIM_PROFILE.is_file():
+    # Standalone controller package on Pi carries this comparison fixture.
+    SIM_PROFILE = CONTROLLER / 'simulation/params/x500_hitl.params'
+REAL_PROFILE = CONTROLLER / 'params/hardware.params'
 
 
-def parse(name):
+def parse(path):
     result = {}
-    for line in (ROOT / name).read_text().splitlines():
+    for line in path.read_text().splitlines():
         if not line or line.startswith('#'):
             continue
         vehicle, component, param, value, kind = line.split('\t')
@@ -19,8 +24,8 @@ def parse(name):
 
 class ParamProfileTests(unittest.TestCase):
     def test_real_profile_clears_hitl_without_transferring_hover_or_bypasses(self):
-        sim = parse('simulation/params/x500_hitl.params')
-        real = parse('controller/params/hardware.params')
+        sim = parse(SIM_PROFILE)
+        real = parse(REAL_PROFILE)
         self.assertEqual(sim['SYS_HITL'], (1, 6))
         self.assertEqual(real['SYS_HITL'], (0, 6))
         self.assertEqual(sim['SYS_AUTOSTART'], (1001, 6))
@@ -40,8 +45,7 @@ class ParamProfileTests(unittest.TestCase):
             self.assertEqual(sim[name], real[name])
 
     def test_native_takeoff_flip_lockdown_matches_both_profiles(self):
-        for path in ('simulation/params/x500_hitl.params',
-                     'controller/params/hardware.params'):
+        for path in (SIM_PROFILE, REAL_PROFILE):
             profile = parse(path)
             self.assertEqual(profile['FD_FAIL_P'], (60, 6))
             self.assertEqual(profile['FD_FAIL_R'], (60, 6))

@@ -66,9 +66,12 @@ hiện không có nút web. `disarm` là dừng motor khẩn cấp và có thể
 rơi, không dùng thay LAND.
 
 `return_home` là Mission do Pi tạo tới GPS cất cánh; nó không gọi PX4 RTL.
-MissionItem đặt độ cao rõ ràng từ ước lượng hiện tại nên `MIS_TAKEOFF_ALT`
-(độ cao cất cánh mặc định của PX4) không được dùng làm ngưỡng tối thiểu
-cho lệnh này. `return-height` dùng Offboard để về độ cao TAKEOFF mặc định
+Waypoint GPS và về Home dùng MAVLink `MAV_FRAME_GLOBAL_INT` với độ cao
+tuyệt đối (AMSL) từ ước lượng PX4 lúc phát lệnh, cộng chênh lệch độ cao
+local còn cần đi. Pi gửi `DO_CHANGE_SPEED` trước waypoint. Cách này tránh
+việc PX4 điều chỉnh độ cao Home trong khi bay làm dịch độ cao waypoint.
+`MIS_TAKEOFF_ALT` (độ cao cất cánh mặc định của PX4) không được dùng làm
+ngưỡng tối thiểu cho lệnh về Home. `return-height` dùng Offboard để về độ cao TAKEOFF mặc định
 2 m tại x/y hiện tại; nó chỉ báo hoàn thành khi telemetry đạt tolerance.
 File overlay thật `controller/params/hardware.params` cũng đặt
 `MIS_TAKEOFF_ALT=2.0` cho PX4 native Takeoff; sửa file không tự thay giá trị
@@ -86,6 +89,16 @@ tốc độ 0,1–0,5 m/s và không vượt `MPC_XY_VEL_MAX` trên PX4. Có th�
 giới hạn độ cao/tốc độ khi khởi động flight service; PX4 vẫn có geofence,
 battery failsafe và các kiểm tra bay riêng.
 
+Phân tích ULog bay thật ngày 10/11 ở
+[`FLIGHT_LOG_2026-11-10.md`](FLIGHT_LOG_2026-11-10.md). Bài thử trực tiếp
+HITL ngày 11/11 ở [`GPS_HITL_2026-11-11.md`](GPS_HITL_2026-11-11.md):
+bay thẳng đứng, A→B 1,5 m, return-home, return-height và LAND đã chạy qua
+terminal PC. PX4 đã nhận MissionRaw; app chỉ báo hoàn tất sau khi telemetry
+vào bán kính xác nhận. Pause/resume của GPS Mission, đường Pi UART, ULog
+của bài thử và bay thật với bản sửa chưa được kiểm chứng. Luồng
+Web→MQTT→hai service→HITL trên PC được ghi ở
+[`WEB_HITL_2026-11-11.md`](WEB_HITL_2026-11-11.md).
+
 ## Trạng thái và nhật ký
 
 Service chỉ subscribe `lac/<deviceID>/control`; nó không publish ACK, state,
@@ -95,7 +108,7 @@ Do không có topic phản hồi, web không thể xác nhận lệnh đã đư�
 đến B chỉ bằng MQTT. Log `COMMAND_ACCEPTED` xác nhận flight service nhận
 yêu cầu; vị trí/phase mới xác nhận chuyến bay.
 
-Backend hiện gửi payload `control`; hai service mới qua
-unit test, chưa qua smoke test Web → MQTT → Gazebo/Pixhawk. Cách chạy thử và
+Backend hiện gửi payload `control`; hai service đã qua smoke test
+Web → MQTT → Gazebo/Pixhawk trên PC. Cách chạy thử và
 lệnh LAND cục bộ: [PI_SERVICES.md](PI_SERVICES.md). Đường MQTT chỉ đọc để
 kiểm tra payload vẫn có trong [`monitor.py`](../pi/control/monitor.py).

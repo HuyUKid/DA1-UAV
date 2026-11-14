@@ -102,6 +102,8 @@ Tại `UAV-REMOTE>` gõ `status` để kiểm tra trước. Sau đó có thể d
 Chỉ terminal kỹ thuật có `arm`, `takeoff`, `fly x y`; web không nhận chúng.
 Khi cần hạ cánh: gõ `land` trong client. Chờ QGC
 và `status` xác nhận ON_GROUND, disarmed; lúc đó mới dừng Gazebo. Tránh
-gửi `disarm` cưỡng bức thay LAND. Luồng hai service chưa được thử
-end to end trên đúng PC/Pi/Pixhawk. Xem [PI_SERVICES.md](PI_SERVICES.md) về cách
+gửi `disarm` cưỡng bức thay LAND. Luồng web qua hai service đã được thử
+trên PC/Pixhawk HITL ngày 11/11/2026; xem
+[WEB_HITL_2026-11-11.md](WEB_HITL_2026-11-11.md). Đường Pi UART/TELEM2
+chưa được thử với bản mã này. Xem [PI_SERVICES.md](PI_SERVICES.md) về cách
 xem trạng thái và log.

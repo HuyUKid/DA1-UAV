@@ -66,9 +66,9 @@ class GpsMissionControl(OffboardControl):
             self.px4_xy_vel_max = number(
                 self.param.get_param_float('MPC_XY_VEL_MAX'),
                 'MPC_XY_VEL_MAX', 0.1, 100)
-            from mavsdk.plugins.mission import Mission, MissionItem, MissionPlan
-            self.mission = Mission(self.drone)
-            self.MissionItem, self.MissionPlan = MissionItem, MissionPlan
+            from mavsdk.plugins.mission_raw import MissionRaw, MissionItem
+            self.mission = MissionRaw(self.drone)
+            self.MissionItem = MissionItem
         except BaseException:
             super().close()
             raise
@@ -132,12 +132,11 @@ class GpsMissionControl(OffboardControl):
                 speed_hint = self.gps_plan_data['speed_m_s']
             if not self.takeoff_complete or self.launch_ned is None:
                 raise ValueError('Return requires completed TAKEOFF and saved launch position')
-            lat, lon, rel = self._in_air_hold()
+            lat, lon, _ = self._in_air_hold()
             if home:
                 if self.launch_gps is None:
                     raise ValueError('Return-home requires saved launch GPS')
                 self._check_hold_altitude()
-                number(rel, 'return_relative_altitude_m', 0.5, 100)
             elif self.nav_min_ltr_alt > self.height:
                 raise ValueError('NAV_MIN_LTR_ALT exceeds the TAKEOFF height')
             self.gps_cancel()
@@ -267,19 +266,39 @@ class GpsMissionControl(OffboardControl):
             raise RuntimeError('TAKEOFF was not confirmed; GPS leg was not started')
         self.gps_launch_pending = True
 
-    def _mission_item(self, latitude_deg, longitude_deg, relative_altitude_m,
-                      speed_m_s, loiter_time_s=math.nan):
-        # The native MAVSDK 4 binding accepts None in __init__ but its C
-        # conversion requires numbers and enum values for every field.
+    def _mission_item(self, seq, latitude_deg, longitude_deg, absolute_altitude_m,
+                      loiter_time_s=0.0):
+        # MAV_FRAME_GLOBAL_INT=5: fixed AMSL altitude. PX4's Home altitude can
+        # be corrected several metres in air without a local EKF height reset.
         return self.MissionItem(
-            latitude_deg=latitude_deg, longitude_deg=longitude_deg,
-            relative_altitude_m=relative_altitude_m, speed_m_s=speed_m_s,
-            is_fly_through=False, gimbal_pitch_deg=math.nan,
-            gimbal_yaw_deg=math.nan, camera_action=self.MissionItem.CameraAction.NONE,
-            loiter_time_s=loiter_time_s, camera_photo_interval_s=1.0,
-            acceptance_radius_m=math.nan, yaw_deg=math.nan,
-            camera_photo_distance_m=math.nan,
-            vehicle_action=self.MissionItem.VehicleAction.NONE)
+            seq=seq, frame=5, command=16, current=0,
+            autocontinue=1, param1=loiter_time_s, param2=0.0,
+            param3=0.0, param4=math.nan,
+            x=round(latitude_deg * 1e7), y=round(longitude_deg * 1e7),
+            z=absolute_altitude_m, mission_type=0)
+
+    def _speed_item(self, speed_m_s):
+        # MAV_CMD_DO_CHANGE_SPEED=178, ground speed. Keep speed in the mission
+        # so the web-requested speed is applied before the first waypoint.
+        return self.MissionItem(
+            # MAVSDK MissionRaw requires exactly one item with current=1.
+            # This speed command is the first item in every uploaded mission.
+            seq=0, frame=2, command=178, current=1, autocontinue=1,
+            param1=1.0, param2=speed_m_s, param3=-1.0, param4=0.0,
+            x=0, y=0, z=0.0, mission_type=0)
+
+    def _absolute_target_altitude(self, height_above_launch_m):
+        p = self.state('position', self.policy.telemetry_max_age_s)
+        local = self.state('local_ned', self.policy.telemetry_max_age_s)
+        with self.lock:
+            sample_gap = abs(self.cache['position'][1] - self.cache['local_ned'][1])
+        if sample_gap > self.policy.sample_gap_s:
+            raise ValueError('Global and local altitude samples are too far apart in time')
+        current_height = self.launch_ned['down_m'] - number(
+            local['down_m'], 'down_m', -10000, 10000)
+        absolute = number(p['absolute_altitude_m'], 'absolute_altitude_m', -1000, 10000)
+        return number(absolute + height_above_launch_m - current_height,
+                      'target_absolute_altitude_m', -1000, 10000)
 
     def _confirm_new_mission_ready(self):
         # Upload ACK can precede PX4 Commander seeing the replacement mission.
@@ -294,7 +313,7 @@ class GpsMissionControl(OffboardControl):
                 'HOLD', 'GPS_CANCELLED', 'GPS_COMPLETE', 'HOME_COMPLETE'}
                 or not self.takeoff_complete or self.external):
             raise ValueError('GPS leg requires confirmed in-air HOLD')
-        lat, lon, rel = self._in_air_hold()
+        lat, lon, _ = self._in_air_hold()
         plan = self.gps_plan_data
         if distance_m(lat, lon, plan['origin_lat'], plan['origin_lon']) > self.gps_limits.start_error_m:
             raise ValueError('UAV moved away from plan origin since staging')
@@ -302,26 +321,16 @@ class GpsMissionControl(OffboardControl):
                 and distance_m(lat, lon, plan['start_lat'], plan['start_lon'])
                 > self.gps_limits.max_leg_m):
             raise ValueError('Current-to-A distance exceeds configured limit')
-        local = self.state('local_ned', self.policy.telemetry_max_age_s)
-        current_above_launch = self.launch_ned['down_m'] - number(
-            local['down_m'], 'down_m', -10000, 10000)
-        # MAVSDK MissionItem uses altitude above PX4 Home. Convert the desired
-        # altitude above this session's launch point using fresh PX4 estimates.
-        target_rel = number(rel + plan['height_above_launch_m'] - current_above_launch,
-                            'target_relative_altitude_m', 0.5, 100)
+        target_alt = self._absolute_target_altitude(plan['height_above_launch_m'])
+        items = [self._speed_item(plan['speed_m_s'])]
         if plan.get('vertical_only'):
-            items = [self._mission_item(plan['end_lat'], plan['end_lon'],
-                                        target_rel, plan['speed_m_s'], loiter_time_s=1.0)]
+            items.append(self._mission_item(1, plan['end_lat'], plan['end_lon'],
+                                            target_alt, loiter_time_s=1.0))
         else:
-            first = self._mission_item(plan['start_lat'], plan['start_lon'],
-                                       target_rel, plan['speed_m_s'])
-            last = self._mission_item(plan['end_lat'], plan['end_lon'],
-                                      target_rel, plan['speed_m_s'], loiter_time_s=1.0)
-            items = [first, last]
-        mission_plan = self.MissionPlan(mission_items=items)
-        # This option affects the next upload, so it must precede upload.
-        self.mission.set_return_to_launch_after_mission(False)
-        self.mission.upload_mission(mission_plan)
+            items.append(self._mission_item(1, plan['start_lat'], plan['start_lon'], target_alt))
+            items.append(self._mission_item(2, plan['end_lat'], plan['end_lon'],
+                                            target_alt, loiter_time_s=1.0))
+        self.mission.upload_mission(items)
         self.gps_mission_stored = True
         try:
             self._confirm_new_mission_ready()
@@ -349,12 +358,11 @@ class GpsMissionControl(OffboardControl):
         if (self.state('armed') is not True
                 or self.state('landed_state', self.policy.telemetry_max_age_s) != 'IN_AIR'):
             raise ValueError('Return-home requires fresh ARMED and IN_AIR telemetry')
-        lat, lon, rel = self._position()
+        lat, lon, _ = self._position()
         local = self.state('local_ned', self.policy.telemetry_max_age_s)
         distance = distance_m(lat, lon, self.launch_gps['latitude_deg'],
                               self.launch_gps['longitude_deg'])
         self._check_hold_altitude()
-        request_rel = number(rel, 'return_relative_altitude_m', 0.5, 100)
         speed = (speed_hint if speed_hint is not None else
                  self.gps_plan_data['speed_m_s'] if self.gps_plan_data is not None else
                  min(self.gps_limits.max_speed_m_s, self.px4_xy_vel_max))
@@ -369,7 +377,8 @@ class GpsMissionControl(OffboardControl):
             'speed_m_s': speed,
             'distance_m': distance,
             'deadline_s': deadline_s,
-            'request_relative_altitude_m': request_rel,
+            'request_absolute_altitude_m': self._absolute_target_altitude(
+                self.launch_ned['down_m'] - number(local['down_m'], 'down_m', -10000, 10000)),
         }
         self.gps_plan_data = None
         self.gps_launch_pending = False
@@ -384,22 +393,18 @@ class GpsMissionControl(OffboardControl):
 
     def _launch_home_leg(self):
         """Replace the old mission with one launch-position waypoint at held height."""
-        lat, lon, rel = self._in_air_hold()
+        lat, lon, _ = self._in_air_hold()
         target = self.home_return_target
         if target is None:
             raise ValueError('Return-home target was lost')
-        local = self.state('local_ned', self.policy.telemetry_max_age_s)
-        current_height = self.launch_ned['down_m'] - number(
-            local['down_m'], 'down_m', -10000, 10000)
-        target_rel = number(rel + target['height_above_launch_m'] - current_height,
-                            'return_relative_altitude_m', 0.5, 100)
+        target_alt = self._absolute_target_altitude(target['height_above_launch_m'])
         if self.gps_mission_stored:
             self.mission.clear_mission()
             self.gps_mission_stored = False
-        item = self._mission_item(target['latitude_deg'], target['longitude_deg'],
-                                  target_rel, target['speed_m_s'], loiter_time_s=1.0)
-        self.mission.set_return_to_launch_after_mission(False)
-        self.mission.upload_mission(self.MissionPlan(mission_items=[item]))
+        items = [self._speed_item(target['speed_m_s']),
+                 self._mission_item(1, target['latitude_deg'], target['longitude_deg'],
+                                    target_alt, loiter_time_s=1.0)]
+        self.mission.upload_mission(items)
         self.gps_mission_stored = True
         # A denied index/start is reported; never auto-retry a flight command.
         self._confirm_new_mission_ready()
@@ -426,11 +431,15 @@ class GpsMissionControl(OffboardControl):
                                   self.home_return_target['longitude_deg'])
             height = self.launch_ned['down_m'] - number(
                 local['down_m'], 'down_m', -10000, 10000)
-            return (distance <= max(2.0, 2 * self.policy.xy_tolerance_m)
+            return (distance <= self._gps_arrival_radius(self.home_return_target['distance_m'])
                     and abs(height - self.home_return_target['height_above_launch_m'])
                     <= self.policy.z_tolerance_m)
         except (ValueError, KeyError, TypeError):
             return None
+
+    def _gps_arrival_radius(self, leg_m):
+        """Keep short-leg completion tighter than the distance flown."""
+        return min(2.0, max(self.policy.xy_tolerance_m, 0.25 * leg_m))
 
     def gps_pause(self):
         self.refresh()
@@ -525,7 +534,7 @@ class GpsMissionControl(OffboardControl):
                 local['down_m'], 'down_m', -10000, 10000)
             distance = distance_m(lat, lon, self.gps_plan_data['end_lat'],
                                   self.gps_plan_data['end_lon'])
-            return (distance <= max(2.0, 2 * self.policy.xy_tolerance_m)
+            return (distance <= self._gps_arrival_radius(self.gps_plan_data['leg_m'])
                     and abs(above_launch - self.gps_plan_data['height_above_launch_m'])
                     <= self.policy.z_tolerance_m)
         except (ValueError, KeyError, TypeError):
@@ -633,18 +642,19 @@ class GpsMissionControl(OffboardControl):
                 if verified is True:
                     self.phase = 'HOME_COMPLETE' if self.home_returning else 'GPS_COMPLETE'
                     self.home_returning = False
-                elif verified is False:
-                    self.phase = 'GPS_UNCONFIRMED'
-                    self.last_error = ('Return-home finished/HOLD but launch position or '
-                                       'held height is outside tolerance' if self.home_returning else
-                                       'PX4 finished mission/HOLD but B position or selected height is outside tolerance')
+                    self.gps_hold_seen_at = None
                 elif self.gps_hold_seen_at is None:
                     self.gps_hold_seen_at = time.monotonic()
                 elif time.monotonic() - self.gps_hold_seen_at > self.gps_limits.confirmation_s:
                     self.phase = 'GPS_UNCONFIRMED'
-                    self.last_error = ('Return-home finished/HOLD but fresh position was not received'
-                                       if self.home_returning else
-                                       'Mission finished/HOLD but fresh height estimate was not received')
+                    self.last_error = (
+                        'Return-home finished/HOLD but launch position or held height is outside tolerance'
+                        if self.home_returning and verified is False else
+                        'PX4 finished mission/HOLD but B position or selected height is outside tolerance'
+                        if verified is False else
+                        'Return-home finished/HOLD but fresh position was not received'
+                        if self.home_returning else
+                        'Mission finished/HOLD but fresh height estimate was not received')
             elif self.gps_hold_seen_at is None:
                 self.gps_hold_seen_at = time.monotonic()
             elif time.monotonic() - self.gps_hold_seen_at > 3:
@@ -703,7 +713,7 @@ class GpsMissionControl(OffboardControl):
             'return_position_confirmed': self.phase == 'HOME_COMPLETE',
             'limits': vars(self.gps_limits),
             'px4_xy_vel_max_m_s': self.px4_xy_vel_max,
-            'source': 'PX4 Mission; completion requires mission-finished, HOLD and fresh target position/height',
+            'source': 'PX4 raw absolute-altitude Mission; completion requires mission-finished, HOLD and fresh target position/height',
         }
         return result
 

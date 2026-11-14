@@ -187,5 +187,7 @@ cd ~/uav-gps
   gán ID mới cho từng bản tin; không nhận diện được bản tin cũ do backend gửi lại.
 - Control Service không publish trạng thái hoặc xác nhận lên MQTT. Xem log
   JSONL, `flight/client.py status` và QGC để biết tiến độ.
-- Unit test không ARM và không mở Pixhawk. Chưa có smoke test Web → MQTT →
-  hai service → HITL trên đúng bộ PC/Pi/Pixhawk; bay thật cần kiểm tra riêng.
+- Unit test không ARM và không mở Pixhawk. Luồng Web → MQTT → hai service →
+  HITL trên **PC** đã được thử ngày 11/11/2026; xem
+  [WEB_HITL_2026-11-11.md](WEB_HITL_2026-11-11.md). Đường Pi UART/TELEM2
+  và bay thật với bản mã này vẫn cần kiểm tra riêng.

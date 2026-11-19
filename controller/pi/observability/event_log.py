@@ -7,6 +7,7 @@ import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 IMPORTANT_EVENTS = {'ARM_REQUESTED', 'ARM_CONFIRMED', 'LAND_REQUESTED',
                     'LAND_CONFIRMED', 'DISARM_REQUESTED', 'DISARM_CONFIRMED',
@@ -27,13 +28,15 @@ def boot_id():
 class EventLog:
     """Writes one JSON object per line and rotates without deleting old files."""
 
-    def __init__(self, directory, service, session_id=None, max_bytes=20 * 1024 * 1024):
+    def __init__(self, directory, service, session_id=None, max_bytes=20 * 1024 * 1024,
+                 terminal=False):
         self.directory = Path(directory)
         self.directory.mkdir(parents=True, exist_ok=True)
         self.service = service
         self.session_id = session_id or uuid.uuid4().hex
         self.boot_id = boot_id()
         self.max_bytes = max_bytes
+        self.terminal = terminal
         self.sequence = 0
         self._lock = threading.RLock()
         self._debug_until = {}
@@ -70,6 +73,17 @@ class EventLog:
             self._file.flush()
             if severity in {'ERROR', 'CRITICAL'} or event in IMPORTANT_EVENTS:
                 os.fsync(self._file.fileno())
+            if self.terminal and record_type == 'event' and severity != 'DEBUG':
+                stamp = datetime.now(ZoneInfo('Asia/Bangkok')).strftime('%H:%M:%S.%f')[:-3]
+                message_text = str(message).replace('\n', ' ').replace('\r', ' ')
+                details = ' '.join(f'{key}={fields[key]}' for key in (
+                    'command_type', 'phase_after', 'target_label', 'command_id', 'mission_id')
+                    if fields.get(key) is not None)
+                try:
+                    print(f'{stamp} {severity:<8} {self.service.upper():<7} {event} | {message_text} {details}'.rstrip(),
+                          flush=True)
+                except (OSError, ValueError):
+                    pass  # A closed SSH output must not interrupt flight commands.
             return record
 
     def set_debug(self, module, enabled, duration_s=600):

@@ -446,7 +446,7 @@
         <mxCell id="e26" value="ra ngoài ngưỡng FLY" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1" source="settle" target="fly">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="note" value="Sơ đồ nhánh thử local NED; web dùng GPS A→B qua control/flight service.&#10;Pi giám sát acceptance/dwell; không phải PX4 waypoint ACK.&#10;HOLD giữ tới lệnh fly x y đầy đủ; LAND/DISARM đi qua khóa khi console xử lý.&#10;Xem FLIGHT_STATES.md và PI_SERVICES.md để đối chiếu trạng thái." style="rounded=1;whiteSpace=wrap;html=0;fillColor=#edf3fc;strokeColor=#4b6585;fontSize=18;" vertex="1" parent="1">
+        <mxCell id="note" value="Sơ đồ nhánh thử local NED; web dùng GPS nhiều điểm qua control/flight service.&#10;Pi giám sát acceptance/dwell; không phải PX4 waypoint ACK.&#10;HOLD giữ tới lệnh fly x y đầy đủ; LAND/DISARM đi qua khóa khi console xử lý.&#10;Xem FLIGHT_STATES.md và GPS_MISSION_FLOW.md để đối chiếu trạng thái." style="rounded=1;whiteSpace=wrap;html=0;fillColor=#edf3fc;strokeColor=#4b6585;fontSize=18;" vertex="1" parent="1">
           <mxGeometry x="80" y="1750" width="1450" height="115" as="geometry" />
         </mxCell>
         <mxCell id="e27" source="armed" target="land" value="land" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;fontSize=15;" edge="1" parent="1">
@@ -472,7 +472,7 @@
         <mxCell id="sys_title" value="Luồng sản phẩm chính: Web → MQTT → Control Service → IPC → Flight Service → PX4" style="text;html=0;align=center;verticalAlign=middle;fontSize=26;fontStyle=1;fontColor=#203044;" vertex="1" parent="sys1">
           <mxGeometry x="150" y="40" width="1300" height="50" as="geometry" />
         </mxCell>
-        <mxCell id="sys_web" value="Web / Backend&#10;GPS A→B, pause, resume, cancel, return, land" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=18;" vertex="1" parent="sys1">
+        <mxCell id="sys_web" value="Web / Backend&#10;GPS start → wp1…wpN → end&#10;arm, takeoff, pause, resume, cancel, return, land" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=18;" vertex="1" parent="sys1">
           <mxGeometry x="70" y="180" width="250" height="120" as="geometry" />
         </mxCell>
         <mxCell id="sys_mqtt" value="MQTT Broker&#10;TLS + ACL&#10;lac/&lt;deviceID&gt;/control" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=18;" vertex="1" parent="sys1">

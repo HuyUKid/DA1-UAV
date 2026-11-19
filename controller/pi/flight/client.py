@@ -13,6 +13,8 @@ if str(PI_DIR) not in sys.path:
     sys.path.insert(0, str(PI_DIR))
 
 from ipc.client import RpcClient
+from observability.display import format_response
+from observability.event_log import EventLog
 
 
 COMMANDS = {
@@ -28,7 +30,7 @@ COMMANDS = {
     'disarm': 'disarm',
 }
 HELP = """Commands:
-  status         Show current PX4/controller state
+  status         Show readable PX4/controller state (status --json for full data)
   arm            ARM on ground; motors may spin
   takeoff        Climb to configured TAKEOFF height (default 2 m)
   fly x y        Fly to absolute local NED north/east metres (also: fly x,y)
@@ -62,7 +64,7 @@ def build_request(line):
     if not words:
         raise ValueError('Enter a command; use help to see available commands')
     command = words[0].lower()
-    if command == 'status' and len(words) == 1:
+    if command == 'status' and (len(words) == 1 or words[1:] == ['--json']):
         return {'op': 'status'}
     if command == 'fly':
         coordinates = words[1].split(',') if len(words) == 2 else words[1:]
@@ -91,11 +93,28 @@ def build_request(line):
     }}
 
 
-def send(client, line):
-    return client.request(build_request(line))
+def send(client, line, audit=None):
+    if audit:
+        audit.write('TERMINAL_INPUT', 'Local command input', input=line)
+    try:
+        request = build_request(line)
+        response = client.request(request)
+    except (OSError, ValueError) as error:
+        if audit:
+            audit.write('TERMINAL_REQUEST_FAILED', str(error), severity='WARNING')
+        raise
+    if audit:
+        audit.write('TERMINAL_RESPONSE', 'Flight Service response',
+                    request=request, response=response)
+    return response
 
 
 def interactive(client, input_fn=None, output=print):
+    with EventLog('session-logs/services', 'client') as audit:
+        return _interactive(client, input_fn, output, audit)
+
+
+def _interactive(client, input_fn, output, audit):
     input_fn = input if input_fn is None else input_fn
     output('Engineering Flight Service console (no direct MAVSDK connection).')
     output(HELP)
@@ -116,8 +135,8 @@ def interactive(client, input_fn=None, output=print):
         try:
             if command.lower() == 'disarm':
                 output('EMERGENCY MOTOR STOP requested; an airborne UAV will fall.')
-            response = send(client, command)
-            output(json.dumps(response, indent=2, allow_nan=False))
+            response = send(client, command, audit)
+            output(format_response(response, command, raw=command.lower() == 'status --json'))
         except (OSError, ValueError) as error:
             output(f'Error: {error}')
 
@@ -126,6 +145,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('command', nargs='*', help='One command and its arguments; omit for interactive shell')
     parser.add_argument('--socket', default='/tmp/uav-flight.sock')
+    parser.add_argument('--json', action='store_true', help='Print the full IPC response')
     args = parser.parse_args(argv)
     client = RpcClient(args.socket)
     if not args.command or args.command == ['shell']:
@@ -134,12 +154,14 @@ def main(argv=None):
         print(HELP)
         return 0
     try:
-        response = send(client, ' '.join(args.command))
+        with EventLog('session-logs/services', 'client') as audit:
+            response = send(client, ' '.join(args.command), audit)
     except ValueError as error:
         parser.error(str(error))
     except OSError as error:
         parser.exit(1, f'Flight service unavailable: {error}\n')
-    print(json.dumps(response, indent=2, allow_nan=False))
+    line = ' '.join(args.command)
+    print(format_response(response, line, raw=args.json))
     return 0 if response.get('ok') else 1
 
 

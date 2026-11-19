@@ -13,7 +13,8 @@ COLUMNS = (
     'cpu_percent', 'ram_used_bytes', 'ram_available_bytes',
     'swap_used_bytes', 'temperature_c', 'disk_used_bytes',
     'disk_available_bytes', 'uptime_s', 'process_max_rss_kib',
-    'px4_mode', 'armed',
+    'px4_mode', 'armed', 'command_type', 'waypoint_index', 'target_label',
+    'height_above_launch_m', 'battery_percent', 'battery_voltage_v', 'process_rss_bytes',
     'landed_state', 'session_id', 'boot_id',
 )
 
@@ -50,6 +51,8 @@ def csv_row(record):
         return item.get('value') if isinstance(item, dict) else None
 
     values = dict(record)
+    status = record.get('status') or {}
+    battery = telemetry_value('battery') or {}
     values.update({
         'cpu_percent': metrics.get('cpu_percent'),
         'ram_used_bytes': memory.get('used_bytes'),
@@ -60,6 +63,10 @@ def csv_row(record):
         'disk_available_bytes': disk.get('available_bytes'),
         'uptime_s': metrics.get('uptime_s'),
         'process_max_rss_kib': process.get('max_rss_kib'),
+        'process_rss_bytes': process.get('rss_bytes'),
+        'height_above_launch_m': status.get('height_above_launch_m'),
+        'battery_percent': battery.get('remaining_percent'),
+        'battery_voltage_v': battery.get('voltage_v'),
         'px4_mode': details.get('flight_mode') or telemetry_value('flight_mode'),
         'armed': details.get('armed') if 'armed' in details else telemetry_value('armed'),
         'landed_state': (details.get('landed_state')
@@ -91,7 +98,9 @@ def main(argv=None):
     parser.add_argument('--format', choices=['jsonl', 'csv'], default='csv')
     args = parser.parse_args(argv)
     paths = sorted((*args.log_dir.glob('control-*.jsonl'),
-                    *args.log_dir.glob('flight-*.jsonl')))
+                    *args.log_dir.glob('flight-*.jsonl'),
+                    *args.log_dir.glob('client-*.jsonl'),
+                    *args.log_dir.glob('console-*.jsonl')))
     try:
         export(paths, args.output, args.format)
     except (OSError, ValueError) as error:

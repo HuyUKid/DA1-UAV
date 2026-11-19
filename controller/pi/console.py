@@ -47,6 +47,8 @@ HOLD is indefinite. A new local target requires an explicit fly x y command.
 
 def parse_command(line):
     words = shlex.split(line)
+    if words == ['status', '--json']:
+        return 'status-json', None
     if not words:
         return 'empty', None
     if len(words) == 1 and words[0].lower() in {
@@ -94,6 +96,9 @@ def execute(fc, line, output=print):
     if command == 'help':
         output(HELP)
     elif command == 'status':
+        from observability.display import format_status
+        output(format_status(fc.status()))
+    elif command == 'status-json':
         output(json.dumps(fc.status(), indent=2, allow_nan=False))
     else:
         if command == 'gps-plan':
@@ -142,6 +147,9 @@ def wait_initial_status(fc, timeout=3.0):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         fc.refresh()
+        timeline = vars(fc).get('diagnostic_timeline')
+        if timeline is not None:
+            timeline.update(fc, fc.status())
         with fc.lock:
             if fc.termination or required.issubset(fc.cache):
                 return
@@ -175,7 +183,7 @@ def main():
                         help='Optional maximum length of each GPS leg in metres; unset means no Pi distance cap')
     parser.add_argument('--gps-max-height', type=float, default=3.0,
                         help='Maximum height above launch in metres for a GPS mission')
-    parser.add_argument('--gps-max-speed', type=float, default=0.5,
+    parser.add_argument('--gps-max-speed', type=float, default=1.0,
                         help='Maximum GPS mission speed in m/s')
     parser.add_argument('--log-dir', default='session-logs', help='Controller diagnostic log directory')
     parser.add_argument('--enable-actuation', action='store_true')
@@ -218,6 +226,10 @@ def main():
             logger.warning('Cannot read host %s', label, exc_info=True)
     print(f'Diagnostic log: {log_path}')
     with ExitStack() as stack:
+        from observability.event_log import EventLog
+        from observability.flight_log import FlightTimeline, NativeSdkLog
+        events = stack.enter_context(EventLog(log_dir, 'console', terminal=True))
+        stack.enter_context(NativeSdkLog(events))
         fault_log = stack.enter_context(open(log_path.with_suffix('.fault.log'), 'a'))
         faulthandler.enable(file=fault_log, all_threads=True)
         stack.callback(faulthandler.disable)
@@ -227,9 +239,10 @@ def main():
                                args.enable_actuation and not args.check, args.system_id,
                                args.height, policy=policy, gps_limits=gps_limits)
         stack.callback(fc.close)
+        fc.diagnostic_timeline = FlightTimeline(events)
         if args.check:
             wait_initial_status(fc)
-            execute(fc, 'status')
+            execute(fc, 'status --json')
             return 0
         print(f'Console -> Pixhawk: {args.connection}; climb above launch={args.height:g} m')
         print(HELP)
@@ -253,6 +266,7 @@ def main():
                 # Diagnostics must not refresh/destroy a plugin before an
                 # operator's LAND or DISARM can be dispatched.
                 logger.info('Command %r', line)
+                events.write('TERMINAL_COMMAND', 'Local input', input=line)
                 if not execute(fc, line):
                     break
             except KeyboardInterrupt:

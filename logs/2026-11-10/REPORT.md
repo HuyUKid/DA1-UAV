@@ -46,5 +46,5 @@ hoàn tất. `DO_CHANGE_SPEED` trong mission mang tốc độ được yêu cầ
 Kiểm thử đơn vị bao gồm trường hợp thực tế `relative_altitude_m=-1,68`
 với local height `2,5 m`. Bài thử HITL trực tiếp ngày 11/11 xác nhận PX4
 nhận MissionRaw, đi A→B, return-home và LAND; xem
-[`GPS_HITL_2026-11-11.md`](GPS_HITL_2026-11-11.md). Bài thử đó không thay
+[`GPS_HITL_2026-11-11.md`](../2026-11-11/GPS_HITL.md). Bài thử đó không thay
 thế việc kiểm tra ULog, pause/resume và bay thật với bản sửa.

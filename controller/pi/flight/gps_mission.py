@@ -1,14 +1,17 @@
-"""Two-waypoint A-then-B PX4 Mission, operated from one Pi session.
+"""Ordered GPS waypoint PX4 Mission, operated from one Pi session.
 
 Network adapters call these methods through the flight service, rather than
 send latitude/longitude to the local-NED fly command.
 """
 import math
 import time
+import json
 from dataclasses import dataclass
 
 from flight.offboard_control import OffboardControl
 from flight.validation import number
+
+MAX_GPS_WAYPOINTS = 50
 
 
 def distance_m(lat1, lon1, lat2, lon2):
@@ -24,7 +27,7 @@ class GpsLimits:
     start_error_m: float = 5.0
     max_leg_m: float | None = None
     max_height_m: float = 3.0
-    max_speed_m_s: float = 0.5
+    max_speed_m_s: float = 1.0
     confirmation_s: float = 5.0
 
     def __post_init__(self):
@@ -159,6 +162,7 @@ class GpsMissionControl(OffboardControl):
                                      'yaw_deg', -180, 180))
         if self.gps_mission_stored:
             self.mission.clear_mission()
+            self._stop_mission_observation()
             self.gps_mission_stored = False
         self.gps_plan_data = None
         self.target = target
@@ -181,8 +185,9 @@ class GpsMissionControl(OffboardControl):
             raise ValueError('PX4 health is not ready')
         return self._position()
 
-    def gps_plan(self, start_lat, start_lon, end_lat, end_lon, height_m, speed_m_s):
-        """Stage A then B; record current PX4 position to guard plan freshness."""
+    def gps_plan(self, start_lat, start_lon, end_lat, end_lon, height_m, speed_m_s,
+                 intermediate_waypoints=None):
+        """Stage start, intermediates and end; guard current position freshness."""
         self.refresh()
         ground = (self.phase in {'IDLE', 'ARMED'}
                   and self.state('landed_state', self.policy.telemetry_max_age_s) == 'ON_GROUND'
@@ -208,39 +213,41 @@ class GpsMissionControl(OffboardControl):
         height_m = number(height_m, 'height_m', self.height, self.gps_limits.max_height_m)
         speed_m_s = number(speed_m_s, 'speed_m_s', 0.1,
                            min(self.gps_limits.max_speed_m_s, self.px4_xy_vel_max))
+        if intermediate_waypoints is None:
+            intermediate_waypoints = []
+        if not isinstance(intermediate_waypoints, list) or len(intermediate_waypoints) > MAX_GPS_WAYPOINTS - 2:
+            raise ValueError('GPS mission requires a list of at most 48 intermediate waypoints')
+        points = [dict(lat_deg=start_lat, lon_deg=start_lon)]
+        for index, point in enumerate(intermediate_waypoints, 1):
+            if not isinstance(point, dict) or set(point) != {'lat_deg', 'lon_deg'}:
+                raise ValueError(f'Waypoint {index} requires lat_deg and lon_deg')
+            points.append(dict(lat_deg=number(point['lat_deg'], f'wp{index}lat', -90, 90),
+                               lon_deg=number(point['lon_deg'], f'wp{index}long', -180, 180)))
+        points.append(dict(lat_deg=end_lat, lon_deg=end_lon))
         approach = distance_m(lat, lon, start_lat, start_lon)
-        leg = distance_m(start_lat, start_lon, end_lat, end_lon)
-        # Web coordinates can lag or be rounded while the estimator wanders
-        # around a stationary vehicle.  Use the existing plan-freshness radius
-        # only to recognize intent; the actual waypoint is pinned to fresh PX4
-        # GPS below, so this allowance never commands that horizontal offset.
-        stationary_radius = max(self.gps_limits.start_error_m,
-                                2 * self.policy.xy_tolerance_m)
-        same_point_radius = self.policy.xy_tolerance_m
-        vertical_only = approach <= stationary_radius and leg <= same_point_radius
-        if vertical_only:
-            # A=B at the fresh vehicle position means "change only altitude".
-            # Pin the mission waypoint to the observed position so stale web
-            # rounding cannot introduce an unintended horizontal correction.
-            start_lat = end_lat = lat
-            start_lon = end_lon = lon
-            approach = leg = 0.0
-        else:
-            if self.gps_limits.max_leg_m is not None and approach > self.gps_limits.max_leg_m:
-                raise ValueError('Current-to-A leg is outside the configured distance limit')
-            if self.gps_limits.max_leg_m is not None and leg > self.gps_limits.max_leg_m:
-                raise ValueError('A-to-B leg is outside the configured distance limit')
+        legs = [distance_m(a['lat_deg'], a['lon_deg'], b['lat_deg'], b['lon_deg'])
+                for a, b in zip(points, points[1:])]
+        if all(distance_m(start_lat, start_lon, point['lat_deg'], point['lon_deg'])
+               <= self.policy.xy_tolerance_m for point in points[1:]):
+            raise ValueError('GPS mission requires distinct horizontal waypoints; coincident points are not a flight route')
+        if self.gps_limits.max_leg_m is not None and approach > self.gps_limits.max_leg_m:
+            raise ValueError('Current-to-A leg is outside the configured distance limit')
+        if self.gps_limits.max_leg_m is not None and any(
+                leg > self.gps_limits.max_leg_m for leg in legs):
+            raise ValueError('Waypoint leg is outside the configured distance limit')
         self.gps_plan_data = dict(start_lat=start_lat, start_lon=start_lon,
                                   end_lat=end_lat, end_lon=end_lon,
                                   origin_lat=lat, origin_lon=lon,
                                   height_above_launch_m=height_m,
                                   speed_m_s=speed_m_s, approach_m=approach,
-                                  leg_m=leg, vertical_only=vertical_only,
+                                  leg_m=legs[-1],
+                                  waypoints=points, waypoint_count=len(points),
+                                  leg_distances_m=legs, route_distance_m=sum(legs),
                                   start_in_air=air)
         return dict(self.gps_plan_data)
 
     def gps_start(self):
-        """Deploy A then B: TAKEOFF first on ground; reuse HOLD in air."""
+        """Deploy all waypoints: TAKEOFF first on ground; reuse HOLD in air."""
         self.require()
         self.refresh()
         if self.gps_plan_data is None:
@@ -308,6 +315,75 @@ class GpsMissionControl(OffboardControl):
         self.mission.set_current_mission_item(0)
         self._in_air_hold()
 
+    def _observe_mission(self, waypoint_count):
+        """Subscribe after upload; raw item 0 is speed, items 1..N are waypoints."""
+        self._stop_mission_observation()
+        generation = getattr(self, 'mission_observation_generation', 0) + 1
+        self.mission_observation_generation = generation
+        self.mission_progress = None
+        self.mission_observation_handles = []
+        def progress(value, user_data=None):
+            current, total = value.current, value.total
+            if (self.phase not in {'GPS_STARTING', 'GPS_RUNNING', 'GPS_RESUME_REQUESTED'}
+                    or total != waypoint_count + 1 or not 1 <= current <= waypoint_count):
+                return
+            with self.lock:
+                if generation != self.mission_observation_generation:
+                    return
+                label = ('HOME' if self.home_returning else
+                         chr(64 + current) if current <= 26 else f'WP{current}')
+                data = dict(target_label=label, waypoint_index=current,
+                            waypoint_count=waypoint_count, raw_item=current)
+                if self.mission_progress == data:
+                    return
+                self.mission_progress = data
+            self.observe('WAYPOINT_TARGET_CHANGED', f'Target {label} ({current}/{waypoint_count})', **data)
+        try:
+            handle = self.mission.subscribe_mission_progress(progress)
+            self.mission_observation_handles.append(('progress', handle))
+        except Exception as error:
+            self.observe('MISSION_PROGRESS_UNAVAILABLE', str(error), severity='WARNING')
+        # Reached reports are separate from current-target progress.
+        direct = getattr(self, 'mavlink_direct', None)
+        if direct is not None:
+            reached_items = set()
+            def reached(message, user_data=None):
+                if (message.system_id != self.drone.get_system_id() or message.component_id != 1
+                        or generation != self.mission_observation_generation
+                        or self.phase not in {'GPS_STARTING', 'GPS_RUNNING', 'GPS_PAUSE_REQUESTED'}):
+                    return
+                try:
+                    seq = json.loads(message.fields_json)['seq']
+                except (KeyError, TypeError, ValueError):
+                    return
+                if not isinstance(seq, int) or not 1 <= seq <= waypoint_count:
+                    return
+                with self.lock:
+                    if seq in reached_items:
+                        return
+                    reached_items.add(seq)
+                label = 'HOME' if self.home_returning else chr(64 + seq) if seq <= 26 else f'WP{seq}'
+                self.observe('WAYPOINT_REACHED', f'PX4 reported waypoint {label} reached',
+                             target_label=label, waypoint_index=seq, raw_item=seq)
+            try:
+                handle = direct.subscribe_message('MISSION_ITEM_REACHED', reached)
+                self.mission_observation_handles.append(('reached', handle))
+            except Exception as error:
+                self.observe('WAYPOINT_REACHED_UNAVAILABLE', str(error), severity='WARNING')
+
+    def _stop_mission_observation(self):
+        self.mission_observation_generation = getattr(self, 'mission_observation_generation', 0) + 1
+        for kind, handle in getattr(self, 'mission_observation_handles', []):
+            try:
+                if kind == 'progress':
+                    self.mission.unsubscribe_mission_progress(handle)
+                else:
+                    self.mavlink_direct.unsubscribe_message(handle)
+            except Exception as error:
+                self.observe('MISSION_OBSERVER_CLEANUP_FAILED', str(error), severity='WARNING')
+        self.mission_observation_handles = []
+        self.mission_progress = None
+
     def _launch_gps_leg(self):
         if (self.gps_plan_data is None or self.phase not in {
                 'HOLD', 'GPS_CANCELLED', 'GPS_COMPLETE', 'HOME_COMPLETE'}
@@ -323,14 +399,14 @@ class GpsMissionControl(OffboardControl):
             raise ValueError('Current-to-A distance exceeds configured limit')
         target_alt = self._absolute_target_altitude(plan['height_above_launch_m'])
         items = [self._speed_item(plan['speed_m_s'])]
-        if plan.get('vertical_only'):
-            items.append(self._mission_item(1, plan['end_lat'], plan['end_lon'],
-                                            target_alt, loiter_time_s=1.0))
-        else:
-            items.append(self._mission_item(1, plan['start_lat'], plan['start_lon'], target_alt))
-            items.append(self._mission_item(2, plan['end_lat'], plan['end_lon'],
-                                            target_alt, loiter_time_s=1.0))
+        for seq, point in enumerate(plan['waypoints'], 1):
+            items.append(self._mission_item(seq, point['lat_deg'], point['lon_deg'],
+                                            target_alt, loiter_time_s=(
+                                                1.0 if seq == len(plan['waypoints']) else 0.0)))
+        self._stop_mission_observation()
         self.mission.upload_mission(items)
+        self.observe('MISSION_UPLOADED', f'Uploaded {len(items) - 1} waypoints', waypoint_count=len(items) - 1)
+        self._observe_mission(len(items) - 1)
         self.gps_mission_stored = True
         try:
             self._confirm_new_mission_ready()
@@ -404,7 +480,10 @@ class GpsMissionControl(OffboardControl):
         items = [self._speed_item(target['speed_m_s']),
                  self._mission_item(1, target['latitude_deg'], target['longitude_deg'],
                                     target_alt, loiter_time_s=1.0)]
+        self._stop_mission_observation()
         self.mission.upload_mission(items)
+        self.observe('MISSION_UPLOADED', 'Uploaded return-home mission', waypoint_count=1)
+        self._observe_mission(1)
         self.gps_mission_stored = True
         # A denied index/start is reported; never auto-retry a flight command.
         self._confirm_new_mission_ready()
@@ -508,6 +587,7 @@ class GpsMissionControl(OffboardControl):
             if position_at < mode_at:
                 return
             self.mission.clear_mission()
+            self._stop_mission_observation()
             self.gps_mission_stored = False
             self.gps_plan_data = None
             self.home_returning = False
@@ -520,7 +600,7 @@ class GpsMissionControl(OffboardControl):
             raise
 
     def _gps_target_height_confirmed(self, hold_mode_at):
-        """Check fresh estimated B position and selected height after HOLD."""
+        """Check fresh final waypoint position and selected height after HOLD."""
         try:
             if self.gps_plan_data is None:
                 return False
@@ -550,6 +630,7 @@ class GpsMissionControl(OffboardControl):
             self.last_error += f'; HOLD failed: {error}'
 
     def land(self):
+        self._stop_mission_observation()
         self.gps_plan_data = None
         self.gps_launch_pending = False
         self.home_returning = False
@@ -557,6 +638,7 @@ class GpsMissionControl(OffboardControl):
         return super().land()
 
     def disarm(self):
+        self._stop_mission_observation()
         self.gps_plan_data = None
         self.gps_launch_pending = False
         self.home_returning = False
@@ -650,7 +732,7 @@ class GpsMissionControl(OffboardControl):
                     self.last_error = (
                         'Return-home finished/HOLD but launch position or held height is outside tolerance'
                         if self.home_returning and verified is False else
-                        'PX4 finished mission/HOLD but B position or selected height is outside tolerance'
+                        'PX4 finished mission/HOLD but final waypoint position or selected height is outside tolerance'
                         if verified is False else
                         'Return-home finished/HOLD but fresh position was not received'
                         if self.home_returning else
@@ -704,6 +786,7 @@ class GpsMissionControl(OffboardControl):
         result['gps_mission'] = {
             'phase': self.phase if self.phase in self.GPS_PHASES else None,
             'plan': self.gps_plan_data,
+            'progress': getattr(self, 'mission_progress', None),
             'waiting_for_takeoff_hold': self.gps_launch_pending,
             'uploaded_this_session': self.gps_mission_stored,
             'last_cancel_position': self.gps_cancel_position,
@@ -720,6 +803,7 @@ class GpsMissionControl(OffboardControl):
     def close(self):
         try:
             if self.mission is not None:
+                self._stop_mission_observation()
                 self.mission.destroy()
                 self.mission = None
         finally:

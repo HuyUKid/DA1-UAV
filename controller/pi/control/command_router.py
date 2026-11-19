@@ -1,7 +1,7 @@
 """Forward validated web commands to the sole Flight Service."""
 
 
-WEB_COMMANDS = {'gps_start', 'pause', 'resume', 'cancel', 'return_home', 'land'}
+WEB_COMMANDS = {'arm', 'takeoff', 'gps_start', 'pause', 'resume', 'cancel', 'return_home', 'land'}
 
 
 class ControlRouter:

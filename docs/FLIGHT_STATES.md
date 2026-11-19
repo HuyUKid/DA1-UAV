@@ -1,12 +1,17 @@
 # Luồng điều khiển local NED và cách kiểm chứng
 
 Trang này mô tả nhánh thử kỹ thuật `fly x y` theo local NED. Luồng web
-chính dùng GPS A→B qua hai service; xem
-[PI_SERVICES.md](../controller/docs/PI_SERVICES.md). Nhánh GPS dùng
+chính dùng danh sách waypoint GPS qua hai service; xem
+[HARDWARE_SETUP.md](../controller/docs/HARDWARE_SETUP.md). Nhánh GPS dùng
 PX4 Mission với `gps-plan`/`gps-start` và lệnh chung `pause`/`resume`/`cancel`;
-xem [WEB_GPS_MISSION.md](../controller/docs/WEB_GPS_MISSION.md). Hai nhánh
+xem [GPS_MISSION_FLOW.md](../controller/docs/GPS_MISSION_FLOW.md). Hai nhánh
 dùng chung TAKEOFF/HOLD ban đầu; sau GPS Cancel có thể nhận A/B mới ngay
-từ HOLD trên không. Không trộn kinh/vĩ độ với x/y mét.
+từ HOLD trên không. Web có thể gửi start → wp1…wpN → end; PX4 thực hiện
+Mission theo thứ tự, HOLD ở điểm cuối. Pause/resume/cancel giữ cùng FSM,
+completion kiểm tra điểm cuối và độ cao; terminal gps-plan vẫn dùng hai điểm.
+Toàn bộ waypoint trùng/gần điểm đầu trong xy_tolerance (mặc định 0,5 m)
+bị từ chối trước TAKEOFF/upload. Nút web d:takeoff độc lập vẫn được giữ.
+Không trộn kinh/vĩ độ với x/y mét.
 
 Kỹ thuật dùng ở đây là **finite-state machine (FSM)** cho tuần tự lệnh,
 kèm **waypoint acceptance + dwell** để giám sát đích. PX4 vẫn chạy mọi vòng
@@ -73,6 +78,10 @@ DISARM được xử lý trước khóa đích; flight termination/mất kết n
 khiến Pixhawk không thực hiện được lệnh. Console chờ RPC native theo từng lệnh, nên ưu tiên này không phải nút
 khẩn cấp thời gian thực khi RPC khác đang chờ. Không có hàng đợi tọa độ: lệnh
 khi đang bận bị từ chối rõ ràng, không lén chạy sau đó.
+
+Web `d:arm` và `d:takeoff` gọi cùng hai thao tác ARM/TAKEOFF bên dưới,
+giữ nguyên điều kiện và cách xác nhận telemetry. TAKEOFF dùng `--height`
+của service, mặc định 2 m, không lấy độ cao nhiệm vụ GPS trên web.
 
 | Lệnh | Điều kiện / hành vi |
 |---|---|
@@ -155,7 +164,7 @@ Không nới tolerance để che lỗi la bàn/IMU trong các log hiện có.
 `--target-timeout` áp dụng cho TAKEOFF và local NED FLY. GPS A→B không có
 deadline quãng bay cố định trên Pi; Return Home dùng deadline theo quãng
 đường/tốc độ lệnh, tối thiểu bằng `--target-timeout`. Xem
-[WEB_GPS_MISSION.md](../controller/docs/WEB_GPS_MISSION.md).
+[GPS_MISSION_FLOW.md](../controller/docs/GPS_MISSION_FLOW.md).
 
 `status.target_error_ned_m` hiển thị sai lệch có dấu theo north/east/down
 (vị trí ước lượng trừ đích) cả khi đang bay tới đích và sau khi vào HOLD.
@@ -273,3 +282,13 @@ Khởi tạo native đạt chưa chứng minh UART hoặc lệnh bay đã đạt
 - [PX4 Hold](https://docs.px4.io/v1.17/en/flight_modes_mc/hold)
 - [PX4 Offboard](https://docs.px4.io/v1.17/en/flight_modes/offboard)
 - [MAVSDK 4.0.6 Action LAND/forced disarm](https://github.com/mavlink/MAVSDK/blob/v4.0.6/cpp/src/mavsdk/plugins/action/action_impl.cpp)
+
+## Hiển thị và ghi nhận trạng thái
+
+`status` dùng bản tóm tắt giữ local NED và GPS position; `status --json`
+giữ schema đầy đủ của IPC. Host health được Flight Service bổ sung;
+console trực tiếp không có snapshot host của service. Battery telemetry
+và `battery_failsafe` cho biết số đo/tuổi dữ liệu và cấu hình đã đọc từ bo.
+Các mốc reached/ACK/phase là những loại xác nhận khác nhau; tiến độ GPS
+phục vụ log không thay điều kiện hoàn tất. Xem
+[LOGGING.md](../controller/docs/LOGGING.md).

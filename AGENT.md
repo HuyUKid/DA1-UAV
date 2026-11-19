@@ -7,8 +7,10 @@ các quy ước dưới đây mô tả cấu trúc và hành vi đang dùng củ
 ## Đọc trước khi thay đổi
 
 - [README.md](README.md): kiến trúc, triển khai Pi và lệnh vận hành.
-- [PI_SERVICES.md](controller/docs/PI_SERVICES.md): luồng web/MQTT, hai service,
-  IPC, log và mức độ kiểm chứng.
+- [HARDWARE_SETUP.md](controller/docs/HARDWARE_SETUP.md): Pi/USB/QGC,
+  service, triển khai, tốc độ và pin.
+- [GPS_MISSION_FLOW.md](controller/docs/GPS_MISSION_FLOW.md): thuật toán GPS và giao thức web.
+- [LOGGING.md](controller/docs/LOGGING.md): status/log và mốc độ cao.
 - [FLIGHT_STATES.md](docs/FLIGHT_STATES.md): FSM, điều kiện chuyển trạng thái,
   ACK, timeout và các trường status.
 - [SETUP.md](simulation/docs/SETUP.md): model X500, nguồn upstream và quy trình
@@ -53,19 +55,27 @@ Phần `simulation/` phải có thể chép sang PC khác mà không cần code 
 - Nhánh GPS dùng `gps-plan`, `gps-start` và các lệnh chung
   `pause`/`resume`/`cancel`: từ đất TAKEOFF/HOLD rồi bay tới A trước B; sau Cancel
   giữ HOLD tại chỗ và có thể lập A/B/độ cao/tốc độ mới từ trên không.
-  Xem `controller/docs/WEB_GPS_MISSION.md`.
+  Xem `controller/docs/GPS_MISSION_FLOW.md`.
   Terminal dùng một bộ `pause`, `resume`, `cancel` cho cả local FLY và GPS
-  Mission, chọn theo trạng thái hiện tại. Sau khi Cancel/hoàn tất đích cũ, hoặc tự Cancel GPS_PAUSED rồi xác nhận HOLD,
+  Mission, chọn theo trạng thái hiện tại. Web nhiều điểm dùng start → wp1…wpN
+  → end (`wpcount` là số điểm trung gian, tối đa 48); terminal gps-plan
+  giữ hai điểm. Kiểm tra toàn bộ tuyến trước khi ARM/upload; nhiệm vụ phải
+  có di chuyển ngang (không nhận toàn bộ điểm trùng nhau trong xy_tolerance
+  để đổi độ cao tại chỗ). Chỉ báo
+  hoàn thành tại điểm cuối. Sau khi Cancel/hoàn tất đích cũ, hoặc tự Cancel GPS_PAUSED rồi xác nhận HOLD,
   `return-home` tạo waypoint GPS tại điểm TAKEOFF ở độ cao hiện tại, rồi HOLD; không gọi
   PX4 RTL và không tự LAND.
-  Mission GPS kết thúc ở B tại độ cao được chọn; chỉ `return-height` mới
+  Mission GPS kết thúc ở điểm cuối tại độ cao được chọn; chỉ `return-height` mới
   yêu cầu về độ cao TAKEOFF tại x/y hiện tại. Sau GPS Cancel, nhận `fly x y`.
   Terminal `flight/client.py` gửi các lệnh này qua IPC tới cùng Flight Service
   đang phục vụ web; không cần dừng service để thử NED/GPS. Service MQTT nhận sáu
-  trường trong cùng bản tin nhiệm vụ web `control` hoặc một trong năm nút
-  `d:pause`, `d:resume`, `d:abort`, `d:rtl`, `d:land` trên cùng topic.
+  trường (có thêm wpcount và các cặp wpN khi nhiều điểm) trong cùng bản
+  tin nhiệm vụ web `control` hoặc một trong bảy nút
+  `d:arm`, `d:takeoff`, `d:pause`, `d:resume`, `d:abort`, `d:rtl`, `d:land`
+  trên cùng topic. ARM/TAKEOFF web dùng cùng FSM/điều kiện như terminal;
+  TAKEOFF dùng `--height` của service, mặc định 2 m.
   Đường web qua hai service đã được thử trong HITL trên PC ngày 11/11/2026;
-  xem `controller/docs/WEB_HITL_2026-11-11.md`. Đường Pi UART chưa được thử
+  xem `logs/2026-11-11/WEB_HITL.md`. Đường Pi UART chưa được thử
   với bản mã này.
 - Luồng sản phẩm chính là web → MQTT → `control/service.py` → Unix IPC →
   `flight/service.py` → `flight/gps_mission.py`. Flight service là chủ MAVSDK duy
@@ -114,6 +124,17 @@ Phần `simulation/` phải có thể chép sang PC khác mà không cần code 
 - Hai file `.params` là overlay một phần, không phải cấu hình UAV đầy đủ.
   File HITL có tốc độ/hover của model đã bay thử; file thật chỉ có giới hạn
   chuyển động chậm dạng ứng viên và phục hồi kiểm tra an toàn khỏi HITL. Bỏ một dòng khỏi overlay không phục hồi giá trị trên Pixhawk.
+- Tốc độ nhiệm vụ ngang thật hiện là 1 m/s: `MPC_XY_VEL_MAX` và
+  `MPC_XY_CRUISE` trong hardware overlay; `--gps-max-speed` của Pi mặc định
+  1.0. HITL cũng đặt hai giới hạn ngang 1 m/s để thử mô phỏng trước;
+  kết quả HITL cũ ở 0.5 m/s không xác nhận cấu hình mới. Pi chặn tốc độ nhiệm vụ vượt min của
+  giới hạn Pi và PX4; không âm thầm giảm tốc độ payload. Giữ giới hạn đứng
+  riêng, không tự tăng theo tốc độ ngang.
+- Web độ cao cần `height_above_launch_m` theo launch local NED;
+  `altitude_relative` là theo Home PX4, không đổi nghĩa trường cũ hoặc
+  kẹp dấu âm. Helper `observability/web_altitude.py` chỉ đọc socket status,
+  trả null nếu thiếu launch/kết nối/local mới. Gateway/backend riêng cần
+  tích hợp theo `controller/docs/LOGGING.md`; helper chưa tự publish.
 - Giữ tuning mô phỏng tách khỏi UAV thật. Không thêm giá trị PID/hover/
   failsafe chưa được xác thực chỉ để làm hết cảnh báo hoặc giúp ARM thành công.
 - X500 hiện là bản port từ `gz_x500` sang Classic. Tham khảo provenance và
@@ -150,6 +171,18 @@ sequence/draw.io và hướng dẫn khi thay đổi hành vi. Không ghi số te
 định mà không kiểm tra lại nếu vừa thêm hoặc xóa test.
 
 ## Log và báo cáo kết quả
+
+- Terminal status dùng renderer gọn, giữ NED/GPS position; `status --json`
+  và IPC giữ schema đầy đủ. `--check` tiếp tục xuất JSON. Log/terminal dùng
+  tiếng Anh ngắn gọn, không đồng nhất ACK với xác nhận thực hiện.
+- Flow log trong `observability/flight_log.py` ghi snapshot tối đa 2 Hz,
+  host metrics mỗi 5 s, SDK/PX4 text và quan sát waypoint. Callback chỉ
+  chẩn đoán, không gửi lệnh bay; lỗi unsubscribe observer không chặn LAND.
+  Giữ nguyên ULog PX4 và không giả định Mission progress là waypoint reached.
+- Chưa triển khai MQTT debug/config/OTA. Pin chỉ được giám sát/đọc tham số;
+  overlays thật/HITL đặt low30%, critical7%, emergency5%, action LAND=2.
+  Pi cảnh báo thêm RESERVE_LOW ở 15%, không gọi LAND theo pin. Chưa nạp/
+  kiểm chứng trên bo; xem HARDWARE_SETUP.md.
 
 Giữ nguyên ULog gốc. Dùng `controller/tools/analyze_logs.py` để tái lập
 số liệu; không sửa `analysis.json` thủ công để khớp kết luận. Phân biệt

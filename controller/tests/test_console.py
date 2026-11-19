@@ -64,6 +64,7 @@ class ConsoleTests(unittest.TestCase):
                     patch('console.logging.basicConfig'), patch('builtins.print'):
                 self.assertEqual(main(), 0)
                 self.assertIs(factory.call_args.args[2], False)
+                self.assertEqual(factory.call_args.kwargs['gps_limits'].max_speed_m_s, 1.0)
                 fc.close.assert_called_once()
                 fc.arm.assert_not_called()
                 self.assertTrue(list(Path(tmp).glob('*.fault.log')))

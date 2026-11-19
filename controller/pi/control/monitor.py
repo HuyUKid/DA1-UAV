@@ -2,7 +2,7 @@
 """Read-only monitor for MQTT control fields, separate or bundled.
 
 This process never opens MAVLink or sends a flight command. Receiving a
-six-field bundle here is not a flight ACK; the control service is the
+mission bundle here is not a flight ACK; the control service is the
 web-command entry point.
 """
 
@@ -22,7 +22,9 @@ FIELD_BOUNDS = {
     'height': (0.0, 100.0),
     'spd': (0.0, 10.0),
 }
-MESSAGE = re.compile(r'c:([a-z]+):([^;\s]+);\Z')
+MAX_INTERMEDIATE_WAYPOINTS = 48  # 50 total, including start and end.
+MESSAGE = re.compile(r'c:([a-z][a-z0-9]*):([^;\s]+);\Z')
+WAYPOINT_FIELD = re.compile(r'wp([1-9][0-9]*)(lat|long)\Z')
 DEVICE_ID = re.compile(r'[A-Za-z0-9_-]{1,64}\Z')
 
 
@@ -33,16 +35,26 @@ def parse_control(payload):
     if not isinstance(payload, str):
         raise ValueError('Payload must be UTF-8 text')
     match = MESSAGE.fullmatch(payload)
-    if not match or match[1] not in FIELD_BOUNDS:
+    if not match:
         raise ValueError('Expected one c:field:value; control field')
     field = match[1]
+    if field in FIELD_BOUNDS:
+        low, high = FIELD_BOUNDS[field]
+    elif field == 'wpcount':
+        low, high = 0, MAX_INTERMEDIATE_WAYPOINTS
+    else:
+        waypoint = WAYPOINT_FIELD.fullmatch(field)
+        if not waypoint or int(waypoint[1]) > MAX_INTERMEDIATE_WAYPOINTS:
+            raise ValueError('Unsupported waypoint control field')
+        low, high = (-90, 90) if waypoint[2] == 'lat' else (-180, 180)
     try:
         value = float(match[2])
     except ValueError:
         raise ValueError('Value must be numeric') from None
-    low, high = FIELD_BOUNDS[field]
     if not math.isfinite(value) or not low <= value <= high:
         raise ValueError(f'{field} must be finite and within {low}..{high}')
+    if field == 'wpcount' and not value.is_integer():
+        raise ValueError('wpcount must be an integer')
     return field, value
 
 
@@ -50,11 +62,11 @@ def parse_controls(payload):
     """Parse one or more concatenated c:field:value; commands atomically."""
     if isinstance(payload, bytes):
         payload = payload.decode('utf-8', errors='strict')
-    if not isinstance(payload, str) or len(payload) > 2048 or not payload.endswith(';'):
+    if not isinstance(payload, str) or len(payload) > 64 * 1024 or not payload.endswith(';'):
         raise ValueError('Expected one or more c:field:value; commands')
     parts = payload[:-1].split(';')
-    if not 1 <= len(parts) <= len(FIELD_BOUNDS):
-        raise ValueError('Expected 1..6 control fields')
+    if not 1 <= len(parts) <= len(FIELD_BOUNDS) + 1 + 2 * MAX_INTERMEDIATE_WAYPOINTS:
+        raise ValueError('Too many control fields or empty message')
     fields = tuple(parse_control(part + ';') for part in parts)
     if len({field for field, _ in fields}) != len(fields):
         raise ValueError('Duplicate control field in one message')

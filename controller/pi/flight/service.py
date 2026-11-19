@@ -3,6 +3,7 @@
 import argparse
 from contextlib import ExitStack
 import math
+import logging
 from pathlib import Path
 import signal
 import sys
@@ -17,6 +18,7 @@ from flight.gps_mission import GpsLimits, GpsMissionControl
 from flight.commands import FlightCommandRouter
 from ipc.server import RpcServer
 from observability.event_log import EventLog
+from observability.flight_log import NativeSdkLog, PythonEventHandler
 from flight.serial_lock import serial_ownership, udp_ownership
 
 
@@ -28,7 +30,7 @@ def build_parser():
     parser.add_argument('--height', type=float, default=2.0)
     parser.add_argument('--gps-max-leg', type=float, default=None)
     parser.add_argument('--gps-max-height', type=float, default=3.0)
-    parser.add_argument('--gps-max-speed', type=float, default=0.5)
+    parser.add_argument('--gps-max-speed', type=float, default=1.0)
     parser.add_argument('--xy-tolerance', type=float, default=0.5)
     parser.add_argument('--z-tolerance', type=float, default=0.3)
     parser.add_argument('--yaw-tolerance', type=float, default=10.0)
@@ -45,6 +47,8 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if not math.isfinite(args.height) or not 0.5 <= args.height <= 100:
         parser.error('height must be 0.5..100 m')
+    if not 1 <= args.system_id <= 255:
+        parser.error('system-id must be 1..255')
     try:
         device = validate_connection(args.profile, args.connection)
         policy = FlightPolicy(xy_tolerance_m=args.xy_tolerance,
@@ -57,6 +61,8 @@ def main(argv=None):
                            max_speed_m_s=args.gps_max_speed)
         if limits.max_height_m < args.height:
             raise ValueError('gps-max-height must be at least --height')
+        if policy.z_tolerance_m >= args.height:
+            raise ValueError('z-tolerance must be less than height')
     except ValueError as error:
         parser.error(str(error))
 
@@ -69,7 +75,15 @@ def main(argv=None):
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
     with ExitStack() as stack:
-        events = stack.enter_context(EventLog(args.log_dir, 'flight'))
+        events = stack.enter_context(EventLog(args.log_dir, 'flight', terminal=True))
+        handler = PythonEventHandler(events)
+        flight_logger = logging.getLogger('flight')
+        previous_level = flight_logger.level
+        flight_logger.setLevel(logging.INFO)
+        flight_logger.addHandler(handler)
+        stack.callback(flight_logger.setLevel, previous_level)
+        stack.callback(flight_logger.removeHandler, handler)
+        stack.enter_context(NativeSdkLog(events))
         events.write('SERVICE_STARTED', 'Flight service started',
                      profile=args.profile, connection=args.connection,
                      actuation_enabled=args.enable_actuation)
@@ -80,6 +94,8 @@ def main(argv=None):
                                        args.height, policy=policy, gps_limits=limits)
         stack.callback(controller.close)
         router = FlightCommandRouter(controller, events)
+        events.write('BATTERY_FAILSAFE_CONFIG', 'Read-only PX4 battery configuration',
+                     configuration=controller.battery_failsafe)
         server = stack.enter_context(RpcServer(args.socket, router.handle))
         print(f'Flight service ready: {args.socket}; actuation={args.enable_actuation}', flush=True)
         while running:

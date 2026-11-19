@@ -122,7 +122,7 @@ rsync -av --exclude='.venv/' --exclude='__pycache__/' --exclude='artifacts/' \
 Trên PC đó, `cd ~/uav` trước khi chạy các lệnh cài/kiểm tra.
 PC cần Gazebo Classic/plugin/Python observer và USB nối Pixhawk. Pi có thể
 chạy hai service qua TELEM2 theo
-[hướng dẫn Pi HITL](../../controller/docs/PI_HITL_REMOTE.md). Nếu chạy hai
+[hướng dẫn Pi HITL](SETUP.md). Nếu chạy hai
 service ngay trên PC mô phỏng thì cần clone cả `controller/` và dùng UDP
 loopback 14540 như [README chính](../../README.md).
 QGC có thể chạy trên PC mô phỏng qua UDP loopback. Nếu đặt QGC ở máy
@@ -270,8 +270,13 @@ PX4 source đã chọn, tạo lại model và cập nhật provenance. Xem lại
 và chạy test sau mỗi lần thay nguồn.
 
 `simulation/params/x500_hitl.params` chứa cấu hình HIL Quad-X, giao tiếp
-TELEM2 và giới hạn bay chậm đã thử trên Pixhawk/PX4 1.17.0 ngày 26/10.
-Hai giá trị EKF độ cao được thêm sau bài thử đó, chưa được xác nhận bằng bài bay HITL.
+TELEM2 dựa trên bài thử Pixhawk/PX4 1.17.0 ngày 26/10. Ngày 19/11,
+`MPC_XY_VEL_MAX` và `MPC_XY_CRUISE` được đổi lên 1 m/s, cùng hai giới
+hạn ngang của overlay thật, để kiểm thử mô phỏng trước. Bài thử cũ dùng
+0,5 m/s; tốc độ 1 m/s và hai giá trị EKF độ cao thêm sau bài thử đó chưa
+được xác nhận bằng bài bay HITL mới. Sau import cần đọc lại hai giới hạn
+ngang và chạy controller với `--gps-max-speed 1`; tốc độ nhiệm vụ cũng
+phải chọn 1 nếu muốn thử 1 m/s. Tăng trần không tự đổi tốc độ yêu cầu.
 Đặt `COM_RC_IN_MODE=4` cho bài kiểm tra PC qua terminal không có radio;
 flight service PC gửi heartbeat loại ground station. File cũng có hai breaker nguồn/
 safety phục vụ HITL và hover 0,74 chỉ đúng cho model X500. Reboot sau import,
@@ -279,6 +284,11 @@ safety phục vụ HITL và hover 0,74 chỉ đúng cho model X500. Reboot sau i
 [báo cáo bay](ALGORITHM_VALIDATION_2026-10-26.md) và file
 `controller/params/hardware.params` ở gốc repo cho ứng viên bay thật.
 Không chuyển hover/PID và breaker HITL sang UAV thật.
+
+Hai bộ tham số chỉ đồng bộ yêu cầu chuyển động để thử cùng kịch bản;
+`SYS_HITL`, airframe, HIL outputs, radio/safety, hover/PID và calibration
+phải phù hợp từng hệ thống. Model X500 không tái hiện đầy đủ UAV thật
+5–6 kg; mô phỏng đạt không chứng minh cấu hình ngoài đời đã đạt.
 
 ## Kiểm tra liên kết khi DISARM
 
@@ -306,7 +316,7 @@ bài bay và đo đáp ứng nằm trong [báo cáo riêng](ALGORITHM_VALIDATION
 
 Nếu clone đủ repository, cài dependency cho controller trong venv mô phỏng
 và chạy flight service qua UDP loopback 14540, control service qua MQTT như
-[PI_SERVICES.md](../../controller/docs/PI_SERVICES.md). Gazebo giữ USB
+[HARDWARE_SETUP.md](../../controller/docs/HARDWARE_SETUP.md). Gazebo giữ USB
 Pixhawk; flight service không mở USB lần thứ hai. Không chạy observer,
 console hoặc smoke test khác đồng thời trên UDP 14540. Nếu chép riêng
 `simulation/`, đặt hai service ở Pi qua TELEM2; phần mô phỏng vẫn độc lập
@@ -359,3 +369,113 @@ Mô hình hiện là môi trường nền phẳng để kiểm tra điều khi�
 bản sao sân bay hay mô hình nhiễu/rung của UAV thật. Bài thử chỉ đạt khi
 có báo cáo runtime và log của chính phiên thử; kiểm tra tĩnh không chứng
 minh đã khắc phục lỗi la bàn, nguồn/Pi hoặc clipping trong bốn ULog cũ.
+
+## HITL: mô phỏng trên PC, service điều khiển trên Raspberry Pi
+
+```text
+Web → MQTT → Pi/control service → Pi/flight service → TELEM2 Pixhawk
+                                                   Pixhawk USB ↔ PC/Gazebo X500
+```
+
+Hướng dẫn này áp dụng khi Pi nối Pixhawk qua TELEM2; PC mô phỏng giữ USB.
+Web ra lệnh GPS nhiều waypoint; terminal kỹ thuật `flight/client.py` có thêm NED/GPS.
+Pi Flight Service là tiến trình duy nhất mở UART MAVLink. Không mở
+`pi/console.py` trực tiếp song song trên cùng UART.
+
+### Chuẩn bị
+
+1. Nạp tham số X500 HITL trên Pixhawk qua QGC theo [SETUP](SETUP.md),
+   reboot và xác nhận `SYS_HITL=1`, DISARM, ON_GROUND. Tháo cánh khi thử HITL.
+2. Nối TELEM2 TX→Pi RX, RX→Pi TX, GND↔GND và bảo đảm mức logic phù hợp.
+   Cổng Pi/baud phải trùng cấu hình Pixhawk; ví dụ thử trước là
+   `serial:///dev/ttyAMA0:921600` trên GPIO14/15.
+3. Kiểm tra trên Pi trước khi chọn cổng:
+
+   ```bash
+   ls -l /dev/serial0 /dev/ttyAMA0 /dev/ttyAMA10 2>/dev/null
+   readlink -f /dev/serial0
+   cat /proc/cmdline
+   pinctrl get 14 15
+   id -nG
+   ```
+
+   Trên Pi 5, `/dev/serial0` có thể trỏ tới UART debug thay vì GPIO14/15.
+   Chỉ dùng `/dev/ttyAMA0` nếu đã xác minh đúng chân và serial login không
+   chiếm UART này. User chạy service cần thuộc nhóm `dialout`.
+
+4. Chép `controller/` từ repository hiện tại sang Pi khi Pixhawk đã DISARM.
+   Từ máy PC, ví dụ:
+
+   ```bash
+   ssh pi@192.168.50.1 'mkdir -p ~/uav-gps'
+   rsync -av --exclude='.venv/' --exclude='__pycache__/' \
+     --exclude='session-logs/' controller/ \
+     pi@192.168.50.1:~/uav-gps/
+   ```
+
+5. Trên Pi:
+
+   ```bash
+   cd ~/uav-gps
+   # Giữ venv đã có, kể cả symlink; chỉ tạo khi đường dẫn hoàn toàn chưa tồn tại.
+   if [ ! -e .venv ] && [ ! -L .venv ]; then python3 -m venv .venv; fi
+   test -x .venv/bin/python
+   readlink -f .venv
+   .venv/bin/python -m pip install -r pi/flight/requirements.txt -r pi/control/requirements.txt
+   .venv/bin/python -B -m unittest discover -s tests -p 'test_*.py' -q
+   ```
+
+Nếu wheel `mavsdk` ARM64 không import được native library, dùng
+[`build_mavsdk_pi.sh`](../../controller/tools/build_mavsdk_pi.sh) theo hướng dẫn trong
+[FLIGHT_STATES.md](../../docs/FLIGHT_STATES.md#native-mavsdk-trên-pi).
+Unit test không chứng minh UART hoặc bài bay đã đạt.
+
+### Chạy mô phỏng và Pi
+
+Trên PC, mở Gazebo trước:
+
+```bash
+PX4_HOME_LAT=47.397742 PX4_HOME_LON=8.545594 PX4_HOME_ALT=488 \
+simulation/.venv/bin/python simulation/x500/launch.py --serial auto
+```
+
+QGC có thể mở qua UDP sau Gazebo; không để QGC chiếm USB Pixhawk mà
+simulator đang giữ. Trên Pi, terminal 1 mở flight service (lệnh dưới có
+quyền bay, chỉ dùng trong bài HITL có giám sát):
+
+```bash
+cd ~/uav-gps
+.venv/bin/python pi/flight/service.py --profile hitl \
+  --connection serial:///dev/ttyAMA0:921600 --height 2 \
+  --gps-max-height 3 --gps-max-speed 1 \
+  --socket /tmp/uav-flight.sock --enable-actuation
+```
+
+Thay `/dev/ttyAMA0` bằng đúng UART đã kiểm tra. Ở terminal 2 trên Pi,
+control service giữ MQTT và hỏi mật khẩu:
+
+```bash
+cd ~/uav-gps
+.venv/bin/python pi/control/service.py --device-id uav01 \
+  --username MQTT_USER --flight-socket /tmp/uav-flight.sock
+```
+
+Trước khi nhấn nút web, ở terminal thứ ba mở client kỹ thuật qua IPC:
+
+```bash
+cd ~/uav-gps
+.venv/bin/python pi/flight/client.py
+```
+
+Tại `UAV-REMOTE>` gõ `status` để kiểm tra trước. Sau đó có thể dùng `arm`,
+`takeoff`, `fly x y`,
+`gps-plan A_lat A_lon B_lat B_lon height speed`, `gps-start`, cùng các lệnh
+`pause`, `resume`, `cancel`, `return-home`, `return-height`, `land`.
+Web có `d:arm` và `d:takeoff`; `fly x y` chỉ có ở terminal kỹ thuật.
+Khi cần hạ cánh: gõ `land` trong client. Chờ QGC
+và `status` xác nhận ON_GROUND, disarmed; lúc đó mới dừng Gazebo. Tránh
+gửi `disarm` cưỡng bức thay LAND. Luồng web qua hai service đã được thử
+trên PC/Pixhawk HITL ngày 11/11/2026; xem
+[WEB_HITL_2026-11-11.md](../../logs/2026-11-11/WEB_HITL.md). Đường Pi UART/TELEM2
+chưa được thử với bản mã này. Xem [HARDWARE_SETUP.md](../../controller/docs/HARDWARE_SETUP.md) về cách
+xem trạng thái và log.

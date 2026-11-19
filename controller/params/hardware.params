@@ -1,6 +1,8 @@
 # PX4 v1.17 partial QGC overlay for a REAL Quad-X UAV (SYS_HITL=0).
-# Candidate slow movement limits only; they were validated on the 2.0893 kg X500 model,
-# NOT on this approximately 5-6 kg, 6S, 3120-700 kV aircraft. No real flight validation.
+# Candidate horizontal mission speed up to 1 m/s for this approximately
+# 5-6 kg, 6S, 3120-700 kV aircraft; not validated by real flight with these changes.
+# The separate X500 HITL profile also requests 1 m/s for simulation-first checks;
+# previous HITL flight results used 0.5 m/s and do not validate this new speed.
 # Import only after restoring/checking the real airframe, outputs, sensors and calibrations.
 # SYS_AUTOSTART=4001 is the pre-reset generic Quad-X airframe observed on this Pixhawk;
 # verify it matches the frame before importing. Reboot after import.
@@ -35,6 +37,12 @@
 1	1	HIL_ACT_FUNC4	0	6
 1	1	CBRK_SUPPLY_CHK	0	6
 1	1	BAT1_N_CELLS	6	6
+# Battery policy: PX4 warns at 30%, LAND at critical 7%, emergency at 5%.
+# Pi adds a display/log warning at 15%; verify estimation and test HITL first.
+1	1	BAT_LOW_THR	0.30	9
+1	1	BAT_CRIT_THR	0.07	9
+1	1	BAT_EMERGEN_THR	0.05	9
+1	1	COM_LOW_BAT_ACT	2	6
 1	1	FD_FAIL_P	60	6
 1	1	FD_FAIL_R	60	6
 1	1	FD_FAIL_P_TTRI	0.3	9
@@ -42,8 +50,8 @@
 1	1	COM_LKDOWN_TKO	3.0	9
 1	1	MPC_XY_VEL_ALL	-1.0	9
 1	1	MPC_Z_VEL_ALL	-1.0	9
-1	1	MPC_XY_VEL_MAX	0.5	9
-1	1	MPC_XY_CRUISE	0.5	9
+1	1	MPC_XY_VEL_MAX	1.0	9
+1	1	MPC_XY_CRUISE	1.0	9
 1	1	MPC_VEL_MANUAL	0.5	9
 1	1	MPC_Z_VEL_MAX_UP	0.5	9
 1	1	MPC_Z_VEL_MAX_DN	0.5	9

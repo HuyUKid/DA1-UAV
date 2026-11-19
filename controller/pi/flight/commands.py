@@ -1,10 +1,13 @@
 """Web and local flight command routing for the sole MAVSDK owner."""
+from observability.flight_log import FlightTimeline
+import time
+import traceback
 
 WEB_FLIGHT_COMMANDS = {
-    'gps_start', 'pause', 'resume', 'cancel', 'return_home', 'land',
+    'arm', 'takeoff', 'gps_start', 'pause', 'resume', 'cancel', 'return_home', 'land',
 }
 LOCAL_FLIGHT_COMMANDS = WEB_FLIGHT_COMMANDS | {
-    'arm', 'takeoff', 'fly', 'gps_plan', 'return_height', 'disarm',
+    'fly', 'gps_plan', 'return_height', 'disarm',
 }
 
 
@@ -15,17 +18,31 @@ class FlightCommandRouter:
         self.controller = controller
         self.log = event_log
         self.last_state = None
+        self.timeline = FlightTimeline(event_log)
+        self.host_health = None
+        self.host_health_at = -float('inf')
 
     def status(self):
         self.controller.refresh()
-        return self.controller.status()
+        status = self.controller.status()
+        if time.monotonic() - self.host_health_at >= 5:
+            self.host_health = self.timeline.metrics.snapshot(self.log.directory)
+            self.host_health_at = time.monotonic()
+        status['host_health'] = self.host_health
+        return status
 
     @staticmethod
     def _mission_values(params):
         try:
             a, b = params['a'], params['b']
-            return (a['lat_deg'], a['lon_deg'], b['lat_deg'], b['lon_deg'],
-                    params['height_above_launch_m'], params['speed_m_s'])
+            values = (a['lat_deg'], a['lon_deg'], b['lat_deg'], b['lon_deg'],
+                      params['height_above_launch_m'], params['speed_m_s'])
+            if 'intermediate_waypoints' in params:
+                points = params['intermediate_waypoints']
+                if not isinstance(points, list):
+                    raise ValueError('intermediate_waypoints must be a list')
+                values += (points,)
+            return values
         except (KeyError, TypeError):
             raise ValueError('GPS plan requires a/b lat_deg/lon_deg, height and speed') from None
 
@@ -59,7 +76,12 @@ class FlightCommandRouter:
             raise ValueError(f'Unsupported {"local" if operation == "local_command" else "web"} '
                              f'flight command: {kind}')
         self.log.write('COMMAND_REQUESTED', f'{kind} requested', command_id=command_id,
-                       mission_id=mission_id, command_type=kind, source=operation)
+                       mission_id=mission_id, command_type=kind, source=operation,
+                       params=command.get('params', {}))
+        linked_mission = (self.timeline.context.get('mission_id')
+                          if kind in {'pause', 'resume', 'cancel', 'land', 'disarm'}
+                          and mission_id == 'local-supervision' else mission_id)
+        self.timeline.context = dict(command_id=command_id, mission_id=linked_mission)
         try:
             if kind == 'gps_start':
                 if operation != 'command':
@@ -67,6 +89,8 @@ class FlightCommandRouter:
                     result = {}
                 else:
                     plan = self.controller.gps_plan(*self._mission_values(command.get('params', {})))
+                    self.log.write('MISSION_VALIDATED', 'GPS plan validated', plan=plan,
+                                   command_id=command_id, mission_id=mission_id)
                     self.controller.gps_start()
                     result = {'plan': plan}
             elif kind == 'gps_plan':
@@ -88,6 +112,7 @@ class FlightCommandRouter:
                 result = {}
             try:
                 status = self.controller.status()
+                self.timeline.update(self.controller, status)
             except Exception as status_error:
                 status = None
                 self.log.write('STATUS_AFTER_COMMAND_FAILED', str(status_error),
@@ -102,7 +127,7 @@ class FlightCommandRouter:
             self.log.write('COMMAND_REJECTED', str(error), severity='WARNING',
                            command_id=command_id, mission_id=mission_id,
                            command_type=kind, source=operation,
-                           error_type=type(error).__name__)
+                           error_type=type(error).__name__, traceback=traceback.format_exc())
             raise
 
     def poll_state(self):
@@ -111,16 +136,8 @@ class FlightCommandRouter:
         except Exception as error:
             self.log.write('FLIGHT_POLL_FAILED', str(error), severity='ERROR')
             return
-        current = {key: status.get(key) for key in ('phase', 'connected')}
+        self.timeline.update(self.controller, status)
         telemetry = status.get('telemetry', {})
-        for key in ('armed', 'flight_mode', 'landed_state'):
-            item = telemetry.get(key, {})
-            current[key] = item.get('value') if isinstance(item, dict) else None
-        if self.last_state is not None and current != self.last_state:
-            self.log.write('FLIGHT_STATE_CHANGED', 'Observed flight state changed',
-                           phase_before=self.last_state.get('phase'),
-                           phase_after=current.get('phase'), details=current)
-        self.last_state = current
         self.log.debug('flight', 'FLIGHT_STATUS_DEBUG', 'Current flight status',
                        status=status)
         self.log.debug('pixhawk', 'PIXHAWK_TELEMETRY_DEBUG',

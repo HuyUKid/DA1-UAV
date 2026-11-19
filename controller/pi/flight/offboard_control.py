@@ -232,6 +232,7 @@ class OffboardControl(Pixhawk):
     def status(self):
         result = super().status()
         result['can_send_target'] = self.ready_for_fly()
+        result['takeoff_height_m'] = self.height
         result['target_reached'] = self.target_reached
         result['completion_source'] = 'Controller arrival supervision of PX4 telemetry; not a PX4 waypoint ACK'
         result['flight_policy'] = asdict(self.policy)

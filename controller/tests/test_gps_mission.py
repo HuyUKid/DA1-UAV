@@ -11,6 +11,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'pi'))
 from flight.flight_policy import ArrivalMonitor, FlightPolicy
 from flight.gps_mission import GpsMissionControl, GpsLimits, distance_m
 from console import execute
+from control.protocol import parse_control
+from control.command_router import ControlRouter
+from flight.commands import FlightCommandRouter
+from observability.web_altitude import launch_height_fields
 
 
 class GpsMissionTests(unittest.TestCase):
@@ -139,6 +143,151 @@ class GpsMissionTests(unittest.TestCase):
         self.assertEqual(sum(item.current for item in items), 1)
         self.assertEqual(items[0].current, 1)
 
+    def multi_web_start(self, count=2, end_lon=106.00009):
+        payload = (f'c:spd:0.4;c:height:2.5;c:startlat:10;c:startlong:106.00002;'
+                   f'c:wpcount:{count};' + ''.join(
+                       f'c:wp{i}lat:10;c:wp{i}long:{106.00002 + i * 0.00002:.7f};'
+                       for i in range(1, count + 1)) +
+                   f'c:endlat:10;c:endlong:{end_lon};')
+        flight = Mock()
+        flight.request.side_effect = FlightCommandRouter(self.fc, Mock()).handle
+        return ControlRouter(flight).dispatch(parse_control(payload))
+
+    def test_three_and_four_point_web_missions_takeoff_then_upload_in_order(self):
+        # This test starts on the ground; only mock SDK calls are used.
+        self.assertTrue(self.multi_web_start()['ok'])
+        self.assertEqual(self.fc.phase, 'TAKEOFF')
+        self.fc.mission.upload_mission.assert_not_called()
+        self.finish_takeoff('GPS_STARTING')
+        self.assert_valid_raw_mission()
+        self.assertEqual([round(item.y / 1e7, 7) for item in self.waypoints()],
+                         [106.00002, 106.00004, 106.00006, 106.00009])
+        self.assertEqual([item.z for item in self.waypoints()], [102.5] * 4)
+        self.assertEqual([item.param1 for item in self.waypoints()], [0.0, 0.0, 0.0, 1.0])
+        self.assertEqual(self.fc.status()['gps_mission']['plan']['waypoint_count'], 4)
+        self.put('flight_mode', 'MISSION')
+        self.fc.refresh()
+        self.cancel_running()
+        self.assertTrue(self.multi_web_start(count=1)['ok'])
+        self.assertEqual(len(self.waypoints()), 3)
+        self.fc.action.arm.assert_called_once()
+
+    def test_six_point_web_route_uploads_A_through_F_in_order(self):
+        self.multi_web_start(count=4, end_lon=106.00014)
+        self.finish_takeoff('GPS_STARTING')
+        self.assert_valid_raw_mission()
+        self.assertEqual([round(item.y / 1e7, 7) for item in self.waypoints()],
+                         [106.00002, 106.00004, 106.00006,
+                          106.00008, 106.00010, 106.00014])
+        self.assertEqual(self.fc.gps_plan_data['waypoint_count'], 6)
+
+    def test_one_metre_mission_speed_requires_both_px4_and_pi_limits(self):
+        self.assertEqual(GpsLimits().max_speed_m_s, 1.0)
+        self.ready()
+        # Raising only the Pi limit must not bypass a PX4 limit of 0.5.
+        with self.assertRaises(ValueError):
+            self.fc.gps_plan(10, 106.00002, 10, 106.00005, 2.5, 1.0)
+        self.fc.px4_xy_vel_max = 1.0
+        self.fc.gps_limits = GpsLimits(max_speed_m_s=0.5)
+        with self.assertRaises(ValueError):
+            self.fc.gps_plan(10, 106.00002, 10, 106.00005, 2.5, 1.0)
+        self.fc.gps_limits = GpsLimits()
+        self.fc.gps_plan(10, 106.00002, 10, 106.00005, 2.5, 1.0)
+        self.fc.gps_start()
+        self.assertEqual(self.uploaded()[0].param2, 1.0)
+        self.assertEqual(self.fc.gps_plan_data['speed_m_s'], 1.0)
+
+    def test_web_altitude_adapter_accepts_real_controller_status_shape(self):
+        self.ready()
+        position = dict(self.fc.state('position'))
+        position['relative_altitude_m'] = -19.4
+        self.put('position', position)
+        fields = launch_height_fields(self.fc.status())
+        self.assertTrue(fields['height_above_launch_valid'])
+        self.assertAlmostEqual(fields['height_above_launch_m'], 2.0)
+
+    def test_fifty_point_web_route_uploads_all_points_without_truncation(self):
+        self.multi_web_start(count=48, end_lon=106.00102)
+        self.finish_takeoff('GPS_STARTING')
+        self.assert_valid_raw_mission()
+        self.assertEqual(len(self.waypoints()), 50)
+        self.assertEqual(self.waypoints()[-1].y / 1e7, 106.00102)
+
+    def test_multi_point_completion_requires_final_point_not_intermediate(self):
+        self.ready()
+        self.multi_web_start()
+        self.put('flight_mode', 'MISSION')
+        self.fc.refresh()
+        self.fc.mission.is_mission_finished.return_value = True
+        self.put('flight_mode', 'HOLD')
+        self.put('local_ned', dict(north_m=0.4, east_m=-0.7, down_m=2.731))
+        self.put('position', dict(latitude_deg=10.0, longitude_deg=106.00004,
+                                  absolute_altitude_m=102.5, relative_altitude_m=-5.0))
+        self.fc.refresh()
+        self.assertEqual(self.fc.phase, 'GPS_RUNNING')
+        self.put('position', dict(latitude_deg=10.0, longitude_deg=106.00009,
+                                  absolute_altitude_m=102.5, relative_altitude_m=-5.0))
+        self.fc.refresh()
+        self.assertEqual(self.fc.phase, 'GPS_COMPLETE')
+
+    def test_loop_with_intermediate_point_remains_a_full_route(self):
+        plan = self.fc.gps_plan(10, 106, 10, 106, 2.5, 0.4,
+                                [{'lat_deg': 10, 'lon_deg': 106.00005}])
+        self.assertGreater(plan['route_distance_m'], 10)
+        self.fc.gps_start()
+        self.finish_takeoff('GPS_STARTING')
+        self.assertEqual(len(self.waypoints()), 3)
+        self.assertEqual(self.waypoints()[1].y / 1e7, 106.00005)
+
+    def test_invalid_intermediate_rejects_entire_plan_without_arming(self):
+        for points in ('bad', [None], [{'lat_deg': math.nan, 'lon_deg': 106}],
+                       [{'lat_deg': 91, 'lon_deg': 106}],
+                       [{'lat_deg': 10, 'lon_deg': 106}] * 49):
+            with self.subTest(points=points), self.assertRaises(ValueError):
+                self.fc.gps_plan(10, 106, 10, 106.00005, 2.5, 0.4, points)
+            self.assertIsNone(self.fc.gps_plan_data)
+        self.fc.action.arm.assert_not_called()
+        self.fc.mission.upload_mission.assert_not_called()
+
+    def test_distance_limit_checks_intermediate_legs_and_keeps_previous_plan(self):
+        previous = self.plan()
+        self.fc.gps_limits = GpsLimits(max_leg_m=10)
+        with self.assertRaisesRegex(ValueError, 'distance limit'):
+            self.fc.gps_plan(10, 106, 10, 106, 2.5, 0.4,
+                             [{'lat_deg': 10, 'lon_deg': 106.001}])
+        self.assertEqual(self.fc.gps_plan_data, previous)
+
+    def test_multi_point_pause_resume_preserves_mission_and_cancel_allows_new_plan(self):
+        self.ready()
+        self.multi_web_start()
+        self.put('flight_mode', 'MISSION')
+        self.fc.refresh()
+        points = self.fc.gps_plan_data['waypoints']
+        self.fc.pause()
+        self.put('flight_mode', 'HOLD')
+        self.fc.refresh()
+        self.assertEqual(self.fc.phase, 'GPS_PAUSED')
+        self.fc.resume()
+        self.put('flight_mode', 'MISSION')
+        self.fc.refresh()
+        self.assertEqual(self.fc.phase, 'GPS_RUNNING')
+        self.assertEqual(self.fc.gps_plan_data['waypoints'], points)
+        self.fc.mission.upload_mission.assert_called_once()
+        self.cancel_running()
+        self.multi_web_start(count=1)
+        self.assertEqual(len(self.waypoints()), 3)
+
+    def test_land_and_disarm_interrupt_multi_point_mission(self):
+        self.ready()
+        self.multi_web_start()
+        self.put('flight_mode', 'MISSION')
+        self.fc.refresh()
+        self.fc.land()
+        self.assertEqual(self.fc.phase, 'LANDING')
+        self.fc.action.land.assert_called_once()
+        self.fc.disarm()
+        self.fc.action.kill.assert_called_once()
+
     def test_mission_item_has_native_binding_fields(self):
         item = self.fc._mission_item(1, 10.0, 106.0, 103.0)
         for value in vars(item).values():
@@ -162,43 +311,43 @@ class GpsMissionTests(unittest.TestCase):
         distant = self.fc.gps_plan(10, 106.001, 10, 106.01, 2, 0.4)
         self.assertGreater(distant['approach_m'], 10)
         self.assertGreater(distant['leg_m'], 10)
-        self.assertFalse(distant['vertical_only'])
         for bad in (math.nan, math.inf, 15.0):
             with self.subTest(speed=bad), self.assertRaises(ValueError):
                 self.fc.gps_plan(10, 106.00002, 10, 106.00005, 2, bad)
 
-    def test_same_current_A_and_B_is_a_single_vertical_only_waypoint(self):
-        plan = self.fc.gps_plan(10.0, 106.0, 10.0, 106.0, 2.5, 0.4)
-        self.assertTrue(plan['vertical_only'])
-        self.assertEqual(plan['approach_m'], 0.0)
-        self.assertEqual(plan['leg_m'], 0.0)
-        self.fc.gps_start()
-        self.finish_takeoff('GPS_STARTING')
-        uploaded = self.waypoints()
-        self.assert_valid_raw_mission()
-        self.assertEqual(len(uploaded), 1)
-        self.assertEqual(uploaded[0].x / 1e7, 10.0)
-        self.assertEqual(uploaded[0].y / 1e7, 106.0)
-        self.assertEqual(uploaded[0].z, 102.5)
+    def test_coincident_or_nearly_coincident_points_reject_before_takeoff(self):
+        for lon in (106.0, 106.00003, 106.001):
+            for delta in (0, 0.000001):
+                with self.subTest(lon=lon, delta=delta), self.assertRaisesRegex(
+                        ValueError, 'distinct horizontal waypoints'):
+                    self.fc.gps_plan(10, lon, 10, lon + delta, 2.5, 0.4)
+        self.fc.action.arm.assert_not_called()
+        self.fc.mission.upload_mission.assert_not_called()
+        self.assertIsNone(self.fc.gps_plan_data)
 
-    def test_rounded_same_A_and_B_within_freshness_radius_pins_current_gps(self):
-        plan = self.fc.gps_plan(10.0, 106.00003, 10.0, 106.00003, 2.5, 0.4)
-        self.assertTrue(plan['vertical_only'])
-        self.assertEqual(plan['start_lat'], 10.0)
-        self.assertEqual(plan['start_lon'], 106.0)
-        self.assertEqual(plan['end_lat'], 10.0)
-        self.assertEqual(plan['end_lon'], 106.0)
+    def test_coincident_multi_point_web_mission_does_not_arm_or_upload(self):
+        payload = ('c:spd:0.4;c:height:2.5;c:startlat:10;c:startlong:106;'
+                   'c:wpcount:1;c:wp1lat:10;c:wp1long:106;'
+                   'c:endlat:10;c:endlong:106;')
+        router = FlightCommandRouter(self.fc, Mock())
+        with self.assertRaisesRegex(ValueError, 'distinct horizontal waypoints'):
+            router.handle({'op': 'command', 'command': parse_control(payload)})
+        self.fc.action.arm.assert_not_called()
+        self.fc.mission.upload_mission.assert_not_called()
 
-    def test_same_A_and_B_far_from_vehicle_is_not_mistaken_for_vertical_only(self):
-        plan = self.fc.gps_plan(10.0, 106.001, 10.0, 106.001, 2.5, 0.4)
-        self.assertFalse(plan['vertical_only'])
-        self.assertGreater(plan['approach_m'], 10)
+    def test_coincident_points_in_air_leave_existing_hold_and_plan_unchanged(self):
+        self.ready()
+        previous = self.plan()
+        with self.assertRaisesRegex(ValueError, 'distinct horizontal waypoints'):
+            self.fc.gps_plan(10, 106, 10, 106, 3.0, 0.4)
+        self.assertEqual(self.fc.phase, 'HOLD')
+        self.assertEqual(self.fc.gps_plan_data, previous)
+        self.fc.mission.upload_mission.assert_not_called()
 
     def test_A_equal_current_position_allows_flight_to_B(self):
         plan = self.fc.gps_plan(10.0, 106.0, 10.0, 106.001, 2.5, 0.4)
         self.assertEqual(plan['approach_m'], 0.0)
         self.assertGreater(plan['leg_m'], 10)
-        self.assertFalse(plan['vertical_only'])
 
     def test_explicit_leg_limit_still_rejects_distant_plan(self):
         self.fc.gps_limits = GpsLimits(max_leg_m=10)
@@ -333,7 +482,7 @@ class GpsMissionTests(unittest.TestCase):
         self.advance(self.fc.gps_limits.confirmation_s + 0.1)
         self.fc.refresh()
         self.assertEqual(self.fc.phase, 'GPS_UNCONFIRMED')
-        self.assertIn('B position', self.fc.last_error)
+        self.assertIn('final waypoint position', self.fc.last_error)
 
     def test_short_leg_waits_for_position_after_px4_finishes(self):
         self.running()

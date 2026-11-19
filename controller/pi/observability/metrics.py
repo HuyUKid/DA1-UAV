@@ -70,5 +70,13 @@ class HostMetrics:
                      'available_bytes': disk_available},
             'uptime_s': float(uptime.split()[0]) if uptime else None,
             'process': {'pid': os.getpid(),
+                        'rss_bytes': self._rss_bytes(),
                         'max_rss_kib': resource.getrusage(resource.RUSAGE_SELF).ru_maxrss},
         }
+
+    @staticmethod
+    def _rss_bytes():
+        try:
+            return int(Path('/proc/self/statm').read_text().split()[1]) * os.sysconf('SC_PAGE_SIZE')
+        except (OSError, ValueError, IndexError):
+            return None

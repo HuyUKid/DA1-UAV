@@ -86,7 +86,8 @@ class TransportTests(unittest.TestCase):
         sdk.add_any_connection.assert_called_once_with('udpin://127.0.0.1:14540')
         sdk.configuration_factory.assert_called_once_with('COMPANION')
         plugins['action'].return_value.arm.assert_not_called()
-        plugins['param'].return_value.get_param_int.assert_called_once_with('SYS_HITL')
+        plugins['param'].return_value.get_param_int.assert_any_call('SYS_HITL')
+        plugins['param'].return_value.get_param_int.assert_any_call('COM_LOW_BAT_ACT')
 
     def test_hardware_loopback_udp_rejects_hitl_board_without_actuation(self):
         with fake_sdk(hitl=1) as (sdk, plugins):
@@ -114,7 +115,7 @@ class TransportTests(unittest.TestCase):
         self.assertEqual(fc.profile, 'hardware')
         self.assertEqual(fc.phase, 'IDLE')
         plugins['action'].return_value.arm.assert_not_called()
-        plugins['param'].return_value.get_param_int.assert_called_once_with('SYS_HITL')
+        plugins['param'].return_value.get_param_int.assert_any_call('SYS_HITL')
         self.assertFalse(hasattr(Pixhawk, 'point_command'))
         self.assertFalse(hasattr(Pixhawk, 'command'))
         self.assertFalse(hasattr(Pixhawk, 'upload'))

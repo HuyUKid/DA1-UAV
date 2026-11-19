@@ -1,4 +1,4 @@
-title UAV Web GPS A→B — Control Service và Flight Service
+title UAV Web GPS nhiều waypoint — Control Service và Flight Service
 
 participant Người_vận_hành
 participant Web_Backend
@@ -19,7 +19,7 @@ Control_Service->>MQTT_Broker: Kết nối TLS, subscribe lac/device/control
 Control_Service->>Log_JSONL: SERVICE_STARTED + MQTT_CONNECTED
 
 Người_vận_hành->>Web_Backend: Gửi nhiệm vụ và cất cánh
-Web_Backend->>MQTT_Broker: payload control gồm sáu trường
+Web_Backend->>MQTT_Broker: payload control: start/end, height, speed, wpcount và các cặp wpN nếu có
 MQTT_Broker->>Control_Service: lac/device/control, Retain phải OFF
 Control_Service->>Control_Service: Xếp hàng; kiểm tra đủ trường, tọa độ và giới hạn payload
 
@@ -29,7 +29,7 @@ else Lệnh hợp lệ
     Control_Service->>Log_JSONL: COMMAND_RECEIVED
     Control_Service->>IPC_Unix_Socket: command gps_start
     IPC_Unix_Socket->>Flight_Service: request JSON nội bộ
-    Flight_Service->>Flight_Service: gps_plan(A, B, height, speed)
+    Flight_Service->>Flight_Service: gps_plan(start, end, height, speed, intermediate_waypoints)
 
     alt Điều kiện flight không đạt
         Flight_Service-->>IPC_Unix_Socket: ok=false + lý do
@@ -47,8 +47,8 @@ else Lệnh hợp lệ
 end
 
 opt Nút điều khiển từ web
-    Người_vận_hành->>Web_Backend: Tạm dừng / tiếp tục / hủy / về điểm cất cánh / LAND
-    Web_Backend->>MQTT_Broker: d:pause / d:resume / d:abort / d:rtl / d:land
+    Người_vận_hành->>Web_Backend: ARM / TAKEOFF / tạm dừng / tiếp tục / hủy / về điểm cất cánh / LAND
+    Web_Backend->>MQTT_Broker: d:arm / d:takeoff / d:pause / d:resume / d:abort / d:rtl / d:land
     MQTT_Broker->>Control_Service: lac/device/control, Retain OFF
     Control_Service->>IPC_Unix_Socket: command tương ứng
     IPC_Unix_Socket->>Flight_Service: request JSON nội bộ
@@ -57,19 +57,23 @@ opt Nút điều khiển từ web
     note over Web_Backend,Flight_Service: Không có ACK MQTT cho web; kiểm tra status và telemetry mới.
 end
 
+note over Flight_Service,Pixhawk_PX4: MissionRaw chứa start → wp1…wpN → end; cùng độ cao/tốc độ, HOLD ở điểm cuối.
+note over Flight_Service,Pixhawk_PX4: d:takeoff dùng --height (mặc định 2 m); d:arm chỉ ARM. Giữ kiểm tra preflight/ON_GROUND/actuation.
+
 loop Giám sát trong khi bay
     Pixhawk_PX4-->>Flight_Service: telemetry mới và tiến độ Mission
+    Flight_Service->>Log_JSONL: Mục tiêu waypoint / báo reached từ PX4 (lọc item tốc độ, nguồn và trùng)
     Flight_Service->>Flight_Service: refresh FSM, kiểm tra phase/mode/armed/landed
-    Flight_Service->>Log_JSONL: phase/state thay đổi và DEBUG nếu được bật
+    Flight_Service->>Log_JSONL: phase/state, ACK/xác nhận, snapshot tối đa 2 Hz, health 5 s, SDK/PX4 text
     Control_Service->>IPC_Unix_Socket: status định kỳ
     IPC_Unix_Socket->>Flight_Service: status request
     Flight_Service-->>Control_Service: flight status
     Control_Service->>Log_JSONL: Trạng thái thay đổi và health Pi
 end
 
-alt Mission tới B
+alt Mission tới waypoint cuối
     Pixhawk_PX4-->>Flight_Service: mission finished + HOLD telemetry
-    Flight_Service->>Flight_Service: GPS_COMPLETE khi telemetry xác nhận
+    Flight_Service->>Flight_Service: GPS_COMPLETE khi telemetry mới xác nhận vị trí cuối + độ cao
     note over Web_Backend,Control_Service: Không publish kết quả; xem status qua client cục bộ và Gazebo/QGC.
 else Mission lỗi sau khi đã bắt đầu
     Flight_Service->>Log_JSONL: lỗi/phase thực tế
@@ -98,4 +102,6 @@ alt MQTT tạm mất
 end
 
 note over Người_vận_hành,Log_JSONL: flight/client.py hỗ trợ ARM/TAKEOFF/NED/GPS qua cùng socket; console.py kết nối Pixhawk trực tiếp nên không chạy cùng Flight Service trên cùng UART/UDP.
+note over Người_vận_hành,Log_JSONL: status hiển thị gọn NED/GPS/health; status --json giữ đầy đủ. Log gốc JSONL có thể xuất CSV/JSONL theo thời gian.
+note over Flight_Service,Pixhawk_PX4: PX4 xử lý pin theo tham số đã nạp: Low 30%, critical 7% → LAND, emergency 5%. Pi cảnh báo thêm 15%, không gửi LAND theo pin.
 note over Control_Service,Web_Backend: Không có topic MQTT đầu ra; xem kết quả trong status và log cục bộ.

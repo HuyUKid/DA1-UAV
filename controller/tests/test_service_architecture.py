@@ -15,6 +15,8 @@ from control.protocol import parse_control
 from control.command_router import ControlRouter
 from control.service import RecentCommandIds
 from flight.commands import FlightCommandRouter
+from flight.service import build_parser as build_flight_parser
+from flight.service import main as flight_service_main
 from flight.client import build_request
 from ipc.client import RpcClient
 from ipc.server import RpcServer
@@ -26,11 +28,28 @@ from observability.metrics import HostMetrics
 LEGACY = ('c:spd:0.5;c:height:3;c:startlat:47.3977760;'
           'c:startlong:8.5456050;c:endlat:47.3978100;'
           'c:endlong:8.5456500;')
+MULTI = ('c:spd:0.5;c:height:3;c:startlat:21.0285110;c:startlong:105.8544440;'
+         'c:wpcount:2;c:wp1lat:21.0450000;c:wp1long:105.8800000;'
+         'c:wp2lat:21.0532450;c:wp2long:105.8927780;'
+         'c:endlat:21.0573670;c:endlong:105.8991670;')
 PI_ROOT = Path(__file__).resolve().parents[1] / 'pi'
 SYSTEMD_ROOT = Path(__file__).resolve().parents[1] / 'systemd'
 
 
 class LayoutBoundaryTests(unittest.TestCase):
+    def test_flight_service_default_mission_speed_is_one_metre(self):
+        self.assertEqual(build_flight_parser().parse_args([]).gps_max_speed, 1.0)
+
+    def test_invalid_flight_service_configuration_is_rejected_before_connection(self):
+        for args in (['--system-id', '0'], ['--system-id', '256'],
+                     ['--height', '0.5', '--z-tolerance', '0.6']):
+            with self.subTest(args=args), patch('flight.service.GpsMissionControl') as factory, \
+                    patch('sys.stderr'):
+                with self.assertRaises(SystemExit) as error:
+                    flight_service_main(args)
+                self.assertEqual(error.exception.code, 2)
+                factory.assert_not_called()
+
     def _imports(self, path):
         tree = ast.parse(path.read_text(), filename=str(path))
         names = []
@@ -103,6 +122,42 @@ class LayoutBoundaryTests(unittest.TestCase):
 
 
 class ProtocolTests(unittest.TestCase):
+    def test_three_and_four_point_web_payloads_preserve_order(self):
+        for count in (1, 2):
+            payload = MULTI if count == 2 else MULTI.replace('wpcount:2', 'wpcount:1').replace(
+                'c:wp2lat:21.0532450;c:wp2long:105.8927780;', '')
+            with self.subTest(count=count):
+                command = parse_control(payload)
+                points = command['params']['intermediate_waypoints']
+                self.assertEqual(len(points), count)
+                self.assertEqual(points[0], {'lat_deg': 21.045, 'lon_deg': 105.88})
+                if count == 2:
+                    self.assertEqual(points[1], {'lat_deg': 21.053245, 'lon_deg': 105.892778})
+                reversed_fields = ';'.join(reversed(payload[:-1].split(';'))) + ';'
+                self.assertEqual(parse_control(reversed_fields)['params'], command['params'])
+
+    def test_waypoint_bundle_rejects_missing_extra_duplicate_and_nonfinite_fields(self):
+        for payload in (
+                MULTI.replace('c:wpcount:2;', ''),
+                MULTI.replace('c:wp2lat:21.0532450;', ''),
+                MULTI.replace('wpcount:2', 'wpcount:1'),
+                MULTI.replace('wpcount:2', 'wpcount:1.5'),
+                MULTI.replace('wpcount:2', 'wpcount:49'),
+                MULTI.replace('wpcount:2', 'wpcount:-1'),
+                MULTI.replace('wp2lat:21.0532450', 'wp3lat:21.0532450'),
+                MULTI.replace('wp2lat:21.0532450', 'wp2lat:nan'),
+                MULTI.replace('wp2long:105.8927780', 'wp2long:181'),
+                MULTI + 'c:wp1lat:21.045;',
+                MULTI.replace('spd:0.5', 'spd:15')):
+            with self.subTest(payload=payload), self.assertRaises(ValueError):
+                parse_control(payload)
+
+    def test_zero_intermediates_and_maximum_waypoint_count(self):
+        self.assertEqual(parse_control(LEGACY + 'c:wpcount:0;')['params']['intermediate_waypoints'], [])
+        payload = LEGACY + 'c:wpcount:48;' + ''.join(
+            f'c:wp{i}lat:10;c:wp{i}long:106;' for i in range(1, 49))
+        self.assertEqual(len(parse_control(payload)['params']['intermediate_waypoints']), 48)
+
     def test_web_control_becomes_one_atomic_gps_start(self):
         command = parse_control(LEGACY)
         self.assertEqual(command['type'], 'gps_start')
@@ -116,7 +171,8 @@ class ProtocolTests(unittest.TestCase):
             parse_control(b'c:spd:0.5;')
 
     def test_each_web_button_maps_to_existing_flight_operation(self):
-        expected = {'d:pause': 'pause', 'd:resume': 'resume',
+        expected = {'d:arm': 'arm', 'd:takeoff': 'takeoff',
+                    'd:pause': 'pause', 'd:resume': 'resume',
                     'd:rtl': 'return_home', 'd:land': 'land',
                     'd:abort': 'cancel'}
         for payload, kind in expected.items():
@@ -126,9 +182,11 @@ class ProtocolTests(unittest.TestCase):
                 self.assertEqual(first['type'], kind)
                 self.assertEqual(first['params'], {})
                 self.assertNotEqual(first['command_id'], again['command_id'])
+                self.assertEqual(parse_control(payload + ';')['type'], kind)
 
     def test_unknown_web_button_is_rejected(self):
-        for payload in ('d:arm', 'd:takeoff', 'd:fly', 'd:disarm', 'd:kill', 'd:rtl-now'):
+        for payload in ('d:fly', 'd:disarm', 'd:kill', 'd:rtl-now',
+                        'd:takeoff;d:arm', 'd:arm:1', 'd:takeoff:3'):
             with self.subTest(payload=payload), self.assertRaises(ValueError):
                 parse_control(payload)
 
@@ -188,6 +246,16 @@ class FlightRouterTests(unittest.TestCase):
             47.397776, 8.545605, 47.39781, 8.54565, 3.0, 0.5)
         self.controller.gps_start.assert_called_once_with()
 
+    def test_web_multi_point_dispatch_passes_all_intermediates(self):
+        self.controller.gps_plan.return_value = {'waypoint_count': 4}
+        command = parse_control(MULTI)
+        self.assertTrue(self.router.handle({'op': 'command', 'command': command})['ok'])
+        self.controller.gps_plan.assert_called_once_with(
+            21.028511, 105.854444, 21.057367, 105.899167, 3.0, 0.5,
+            [{'lat_deg': 21.045, 'lon_deg': 105.88},
+             {'lat_deg': 21.053245, 'lon_deg': 105.892778}])
+        self.controller.gps_start.assert_called_once_with()
+
     def test_local_xy_fly_is_not_exposed_to_web(self):
         with self.assertRaisesRegex(ValueError, 'Unsupported web flight'):
             self.router.handle({'op': 'command', 'command': {
@@ -214,15 +282,13 @@ class FlightRouterTests(unittest.TestCase):
         self.controller.gps_start.assert_called_once_with()
         self.assertEqual(self.controller.gps_plan.call_count, 1)
 
-    def test_local_arm_takeoff_and_fly_dispatch_without_web_exposure(self):
+    def test_local_arm_takeoff_and_fly_dispatch(self):
         for line, method in [('arm', 'arm'), ('takeoff', 'takeoff'), ('fly -4 5', 'fly')]:
             with self.subTest(line=line):
                 request = build_request(line)
                 self.assertEqual(request['op'], 'local_command')
                 self.assertTrue(self.router.handle(request)['ok'])
                 getattr(self.controller, method).assert_called_once()
-                with self.assertRaisesRegex(ValueError, 'Unsupported web flight'):
-                    self.router.handle(dict(request, op='command'))
         self.controller.fly.assert_called_once_with(-4.0, 5.0)
 
     def test_local_command_rejects_missing_fly_coordinates(self):
@@ -279,7 +345,8 @@ class ControlRouterTests(unittest.TestCase):
         flight.request.assert_called_once()
 
     def test_web_buttons_reach_flight_controller_through_ipc(self):
-        mapping = {'d:pause': 'pause', 'd:resume': 'resume',
+        mapping = {'d:arm': 'arm', 'd:takeoff': 'takeoff',
+                   'd:pause': 'pause', 'd:resume': 'resume',
                    'd:rtl': 'return_home', 'd:land': 'land',
                    'd:abort': 'cancel'}
         for payload, method in mapping.items():

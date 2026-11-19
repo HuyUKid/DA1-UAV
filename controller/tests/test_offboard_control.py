@@ -10,6 +10,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'pi'))
 from console import execute, parse_command
 from flight.flight_policy import ArrivalMonitor, FlightPolicy
 from flight.offboard_control import OffboardControl
+from flight.commands import FlightCommandRouter
+from control.command_router import ControlRouter
+from control.protocol import parse_control
 
 
 class ControllerTests(unittest.TestCase):
@@ -125,6 +128,43 @@ class ControllerTests(unittest.TestCase):
         self.fc.arm()
         self.takeoff()
         self.fc.action.arm.assert_called_once()
+
+    def web_command(self, payload):
+        flight = Mock()
+        flight.request.side_effect = FlightCommandRouter(self.fc, Mock()).handle
+        return ControlRouter(flight).dispatch(parse_control(payload))
+
+    def test_web_arm_then_takeoff_uses_same_fsm_and_launch_height(self):
+        self.assertTrue(self.web_command('d:arm')['ok'])
+        self.assertEqual(self.fc.phase, 'ARMED')
+        self.fc.make_offboard.assert_not_called()
+        self.assertTrue(self.web_command('d:takeoff')['ok'])
+        self.assertEqual(self.fc.phase, 'TAKEOFF')
+        self.assertAlmostEqual(self.fc.target['down_m'], 5.231 - 2.0)
+        self.fc.action.arm.assert_called_once()
+        with self.assertRaises(ValueError):
+            self.web_command('d:takeoff')
+        self.fc.make_offboard.return_value.start.assert_called_once()
+
+    def test_web_arm_takeoff_preserve_actuation_health_and_ground_checks(self):
+        for payload in ('d:arm', 'd:takeoff'):
+            for condition in ('disabled', 'preflight', 'airborne', 'stale', 'disconnected'):
+                with self.subTest(payload=payload, condition=condition):
+                    self.fc = self.make_fc()
+                    if condition == 'disabled':
+                        self.fc.enabled = False
+                    elif condition == 'preflight':
+                        self.put('health_all_ok', False)
+                    elif condition == 'airborne':
+                        self.put('landed_state', 'IN_AIR')
+                    elif condition == 'stale':
+                        self.advance(10, publish=False)
+                    else:
+                        self.fc.drone.is_connected.return_value = False
+                    with self.assertRaises((ValueError, RuntimeError)):
+                        self.web_command(payload)
+                    self.fc.action.arm.assert_not_called()
+                    self.fc.make_offboard.assert_not_called()
 
     def test_arm_then_land_has_ground_context_and_no_offboard(self):
         self.fc.arm()

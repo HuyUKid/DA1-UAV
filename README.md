@@ -1,136 +1,120 @@
-# UAV — điều khiển nhiệm vụ GPS qua web
+# UAV — điều khiển nhiệm vụ GPS
+
+Điều khiển Pixhawk/PX4 bằng Python trên Raspberry Pi hoặc máy mô phỏng.
+Web gửi nhiệm vụ GPS nhiều điểm qua MQTT; terminal kỹ thuật dùng cùng
+Flight Service để kiểm tra NED/GPS. PX4 chạy estimator và các vòng điều
+khiển bay; Pi quản lý trình tự lệnh và kiểm tra telemetry.
+
+```text
+Web → MQTT → Control Service → Unix socket → Flight Service → MAVSDK → PX4
+Terminal flight/client.py ──────────┘
+```
 
 Repository: [HuyUKid/DA1-UAV](https://github.com/HuyUKid/DA1-UAV).
 
-Luồng sản phẩm là web gửi nhiệm vụ GPS A→B qua MQTT. Control Service trên
-PC hoặc Raspberry Pi chỉ nhận `lac/<deviceID>/control`, kiểm tra bản tin và
-chuyển lệnh qua socket nội bộ; Flight Service là tiến trình duy nhất nói
-chuyện với Pixhawk qua MAVSDK. Không có topic MQTT phản hồi.
-Pixhawk/PX4 chạy estimator và các vòng điều khiển bay. `fly x y` trong
-terminal là công cụ thử local NED, không phải lệnh web. Terminal kỹ thuật
-`flight/client.py` và web cùng gửi yêu cầu tới **một** Flight Service;
-không cần mở `console.py` trực tiếp để thử NED/GPS.
+## Cấu trúc đang dùng
 
-```text
-Web/backend → MQTT broker → Control Service → Unix socket → Flight Service → Pixhawk/PX4
-                       Terminal kỹ thuật ────────┘
-```
-
-## Phạm vi hiện tại
-
-Code hai service đã có unit test bằng mock. Luồng Web → MQTT → hai service →
-Gazebo HITL → Pixhawk **chưa được thử end to end** và chưa bay thật.
-Unit test không xác nhận đường điều khiển bay trên thiết bị.
-
-| Thành phần | Đường dẫn |
+| Thư mục | Nội dung |
 |---|---|
-| MQTT, kiểm tra lệnh GPS và health cục bộ | [`controller/pi/control/`](controller/pi/control/) |
-| Điều khiển GPS/FSM, một chủ MAVSDK | [`controller/pi/flight/`](controller/pi/flight/), [`gps_mission.py`](controller/pi/flight/gps_mission.py) |
-| Giao tiếp nội bộ và log | [`controller/pi/ipc/`](controller/pi/ipc/), [`observability/`](controller/pi/observability/) |
-| Tham số Pixhawk | [`simulation/params/x500_hitl.params`](simulation/params/x500_hitl.params), [`controller/params/hardware.params`](controller/params/hardware.params) |
-| Mô phỏng Gazebo Classic X500 | [`simulation/`](simulation/) |
-| Terminal kỹ thuật NED/GPS qua Flight Service | [`controller/pi/flight/client.py`](controller/pi/flight/client.py) |
+| `controller/pi/flight/` | Kết nối Pixhawk, FSM, Mission GPS, terminal IPC |
+| `controller/pi/control/` | Nhận và kiểm tra lệnh MQTT |
+| `controller/pi/ipc/` | Unix socket giữa các tiến trình |
+| `controller/pi/observability/` | Hiển thị status, log, metrics và xuất file |
+| `controller/params/` | Overlay tham số UAV thật |
+| `controller/tests/`, `controller/tools/` | Test và công cụ triển khai/chẩn đoán |
+| `controller/systemd/` | Mẫu chạy hai service trên Pi |
+| `simulation/` | Model X500, bộ cài Classic HITL, tham số và test mô phỏng |
+| `docs/` | FSM và sơ đồ thuật toán |
+| `logs/` | Dữ liệu và báo cáo kiểm chứng theo ngày |
 
-Vai trò các file đang dùng: [PI_SERVICES.md](controller/docs/PI_SERVICES.md).
-Trạng thái thuật toán GPS: [WEB_GPS_MISSION.md](controller/docs/WEB_GPS_MISSION.md).
+## Thông số vận hành
 
-## Cài và mở mô phỏng HITL trên PC
+- TAKEOFF mặc định 2 m trên mốc local NED được chụp trước cất cánh.
+- Nhiệm vụ GPS: tối đa 50 waypoint theo thứ tự, HOLD tại điểm cuối.
+- Tốc độ ngang tối đa trong hai overlay: 1 m/s. Tốc độ từng nhiệm vụ do
+  web/terminal chọn, không vượt giới hạn Pi và PX4.
+- Pin: PX4 cảnh báo 30%, Pi cảnh báo thêm 15%, PX4 LAND ở critical 7%,
+  emergency 5% sau khi nạp và đọc lại tham số trên bo.
+- `status` giữ NED, GPS position, các mốc độ cao, vận tốc, health và pin;
+  `status --json` xuất dữ liệu đầy đủ.
 
-Máy mô phỏng cần Ubuntu 22.04 x86_64, Pixhawk thật đã cấu hình `SYS_HITL=1`,
-Gazebo Classic 11 và các dependency của bộ cài. Repository đã chứa model,
-world, mesh/texture và plugin Classic build sẵn cho nền tảng đó. PX4 source,
-QGroundControl, Python venv và firmware Pixhawk không đi kèm. Không cần ROS 2.
+Các thay đổi nhiều waypoint, ARM/TAKEOFF web, tốc độ 1 m/s, pin và log mới
+đã có kiểm thử phần mềm. Cấu hình hiện tại chưa được bay HITL/bay thật
+trong phiên rà soát này. Các báo cáo trước nằm trong `logs/` và
+`simulation/docs/`; kết quả cũ không xác nhận bản mã mới.
 
-```bash
-git clone https://github.com/HuyUKid/DA1-UAV.git UAV
-cd UAV
-bash simulation/install_classic.sh
-simulation/.venv/bin/python -m pip install --only-binary=:all: \
-  -r controller/pi/flight/requirements.txt -r controller/pi/control/requirements.txt
-```
+## Chọn hướng dẫn
 
-Nếu Gazebo Classic 11 đã cài: `bash simulation/install_classic.sh --skip-system`.
-Nếu dùng nền tảng khác, xem [SETUP.md](simulation/docs/SETUP.md); gói plugin
-có sẵn không dùng chung cho mọi hệ điều hành. Bộ cài không flash firmware,
-không nạp tham số Pixhawk.
+| Công việc | Tài liệu |
+|---|---|
+| Cài mô phỏng, chạy PC hoặc Pi qua TELEM2 | [SETUP.md](simulation/docs/SETUP.md) |
+| Setup Pi/USB/QGC, chạy service, tốc độ và pin | [HARDWARE_SETUP.md](controller/docs/HARDWARE_SETUP.md) |
+| Thuật toán GPS, waypoint, payload và nút web | [GPS_MISSION_FLOW.md](controller/docs/GPS_MISSION_FLOW.md) |
+| Status, log, mốc độ cao và tích hợp web | [LOGGING.md](controller/docs/LOGGING.md) |
+| FSM và điều kiện local NED | [FLIGHT_STATES.md](docs/FLIGHT_STATES.md) |
 
-Trước thử HITL: tháo cánh; trong QGC xác nhận `SYS_HITL=1`, DISARM,
-ON_GROUND và các tham số HITL tương ứng model X500. Mở Gazebo ở terminal 1:
+## Thử trên PC mô phỏng
+
+Từ gốc repository, cài simulator theo SETUP rồi mở Gazebo ở terminal 1:
 
 ```bash
 PX4_HOME_LAT=47.397742 PX4_HOME_LON=8.545594 PX4_HOME_ALT=488 \
 simulation/.venv/bin/python simulation/x500/launch.py --serial auto
 ```
 
-`--serial auto` chỉ phù hợp khi có đúng một USB serial Pixhawk. Gazebo giữ
-USB; flight service kết nối UDP loopback 14540. Không chạy đồng thời console,
-observer hoặc flight service thứ hai trên cùng cổng đó.
-
-## Chạy hai service để thử web trong HITL
-
-Trong terminal 2 tại gốc repository, mở flight service. Khi chỉ kiểm tra
-trạng thái, bỏ `--enable-actuation`; chỉ thêm cờ này trong buổi thử HITL
-có giám sát trực tiếp và đã xác nhận bo đang DISARM:
+Gazebo giữ USB Pixhawk. Terminal 2 mở Flight Service khi đã xác nhận
+profile HITL, DISARM/ON_GROUND và tháo cánh:
 
 ```bash
 simulation/.venv/bin/python controller/pi/flight/service.py \
   --profile hitl --connection udpin://127.0.0.1:14540 \
-  --height 2 --gps-max-height 3 --gps-max-speed 0.5 \
+  --height 2 --gps-max-height 7 --gps-max-speed 1 \
   --socket /tmp/uav-flight.sock --enable-actuation
 ```
 
-Trong terminal 3, mở control service (thay `MQTT_USER` bằng tài khoản broker;
-mật khẩu được hỏi kín, không đặt trong command line):
-
-```bash
-simulation/.venv/bin/python controller/pi/control/service.py \
-  --device-id uav01 --username MQTT_USER \
-  --flight-socket /tmp/uav-flight.sock
-```
-
-Control service chỉ subscribe `lac/uav01/control`. Nút nhiệm vụ web gửi đủ sáu
-trường trong **một** payload `c:...;`; các nút điều khiển gửi `d:pause`,
-`d:resume`, `d:abort`, `d:rtl` hoặc `d:land`, với Retain OFF. Service không publish
-topic nào dưới `lac/uav01`; trạng thái chỉ xem qua `flight/client.py status`,
-log và QGC. Trạng thái "mất kết nối" trên web sẽ không được cập nhật bởi
-service này vì không có topic phản hồi.
-
-Pi gán ID mới cho từng bản tin nhận được; web hiện chưa gửi ID hay hạn dùng
-để chống phát lại bản tin. Mở terminal kỹ thuật qua cùng flight
-service ở terminal khác:
+Terminal 3 mở client để kiểm tra và ra lệnh:
 
 ```bash
 simulation/.venv/bin/python controller/pi/flight/client.py
 ```
 
-Tại `UAV-REMOTE>` dùng `status`, `arm`, `takeoff`, `fly x y`,
-`gps-plan A_lat A_lon B_lat B_lon height speed`, `gps-start`, `pause`,
-`resume`, `cancel`, `return-home`, `return-height` hoặc `land`.
-`gps-plan` chỉ lưu kế hoạch; `gps-start` mới triển khai. `disarm` gửi dừng motor khẩn cấp ngay, không có
-bước xác nhận thứ hai và có thể làm UAV rơi; không dùng thay LAND. `exit`/Ctrl+C không tự LAND. Phản hồi lệnh không xác
-nhận đã chạm đất; đợi ON_GROUND và DISARM trong `status`/QGC rồi mới dừng
-service và Gazebo.
+Nếu dùng web, mở thêm Control Service; mật khẩu được hỏi tại prompt:
 
-## Triển khai Raspberry Pi
+```bash
+simulation/.venv/bin/python controller/pi/control/service.py \
+  --device-id uav01 --username MQTT_USER --flight-socket /tmp/uav-flight.sock
+```
 
-Trong HITL, PC mô phỏng nối USB Pixhawk, Pi có thể nối TELEM2 bằng UART.
-Bay thật, Pi có thể nối Pixhawk bằng USB và MAVLink Router chia cổng cho
-flight service và QGC. Profile `hitl` yêu cầu `SYS_HITL=1`; profile
-`hardware` yêu cầu `SYS_HITL=0`. Cả hai file `.params` chỉ là overlay một
-phần. File `hardware.params` là ứng viên, chưa được kiểm chứng trên UAV
-thật; không sao chép tuning hover/PID của X500 sang UAV 5–6 kg.
+`--enable-actuation` cho phép gửi lệnh bay; bỏ cờ khi chỉ đọc. Một tiến
+trình duy nhất giữ cổng 14540. `console.py` là công cụ kết nối trực tiếp,
+không chạy song song Flight Service trên cùng cổng.
 
-Hướng dẫn dây/cổng và kiểm tra trên đất: [PI_HITL_REMOTE.md](controller/docs/PI_HITL_REMOTE.md),
-[HARDWARE_SETUP.md](controller/docs/HARDWARE_SETUP.md). Mẫu systemd ở
-[`controller/systemd/`](controller/systemd/) mặc định mở flight service
-**chỉ đọc**; sau khi kiểm chứng mới cấu hình quyền điều khiển. `control`
-service vẫn giữ MQTT và ghi lỗi cục bộ nếu flight service tạm ngừng.
+## Lệnh terminal
 
-## Nhật ký và kiểm thử
+| Lệnh | Chức năng |
+|---|---|
+| `status`, `status --json` | Xem tóm tắt hoặc đầy đủ |
+| `arm` | ARM trên mặt đất |
+| `takeoff` | Lên độ cao `--height`, rồi HOLD |
+| `fly x y` | Tới tọa độ local NED tuyệt đối; giữ độ cao đích hiện có |
+| `gps-plan A_lat A_lon B_lat B_lon height speed` | Lưu kế hoạch GPS hai điểm |
+| `gps-start` | Triển khai kế hoạch đã lưu |
+| `pause`, `resume`, `cancel` | Tạm dừng, tiếp tục hoặc hủy đích đang chạy |
+| `return-home` | Về GPS cất cánh ở độ cao hiện tại, rồi HOLD |
+| `return-height` | Giữ x/y hiện tại, về độ cao TAKEOFF |
+| `land` | Yêu cầu hạ cánh |
+| `disarm` | Force motor stop; UAV có thể rơi nếu đang trên không |
+| `help`, `exit` | Trợ giúp hoặc đóng client |
 
-Hai service lưu JSONL theo phiên trong thư mục `--log-dir`. PX4 ULog trên
-thẻ SD, QGC Messages và log Pi là ba nguồn khác nhau. Mẫu sức khỏe Pi ghi
-cục bộ, trạng thái bay đọc bằng `flight/client.py status`.
+Chờ xác nhận HOLD trước đích mới. Sau LAND, chờ ON_GROUND và armed=false.
+Đóng client không tự LAND. Nhiệm vụ nhiều điểm dùng payload web/MQTT;
+terminal `gps-plan` giữ cú pháp hai điểm.
+
+Web/backend và bộ phát telemetry được triển khai riêng. Trong hệ thống
+hiện tại, reader trên Pi nhận bản sao MAVLink ở 14541 để gửi trạng thái
+lên web. Hợp đồng lệnh và telemetry được ghi trong hướng dẫn GPS và log; mã backend/gateway không nằm trong repository này.
+
+## Kiểm thử
 
 ```bash
 python3 -B -m unittest discover -s controller/tests -p 'test_*.py'
@@ -138,5 +122,6 @@ python3 -B -m unittest discover -s simulation/tests -p 'test_*.py'
 python3 simulation/x500/check_setup.py --static
 ```
 
-Các bài này không ARM hoặc mở phiên bay. Kết quả mô phỏng và log đã ghi
-được lưu riêng trong `simulation/docs/` và `logs/`.
+Unit test dùng mock và không điều khiển motor. Kiểm tra tĩnh không thay
+thế bài bay HITL. Nạp file `.params` là thao tác riêng trên Pixhawk;
+sửa file trong repository không thay tham số đang chạy trên bo.

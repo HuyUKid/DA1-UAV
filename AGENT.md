@@ -22,6 +22,10 @@ chiếu với mã nguồn, test và dữ liệu thực tế khi sửa lỗi.
 
 ## Giữ cấu trúc thư mục
 
+`uav-gateway-review/` là bản sao gateway do người khác phụ trách. Theo
+yêu cầu người dùng, giữ nguyên nội dung; chỉ đọc để đối chiếu, không sửa
+hoặc tích hợp thay đổi vào thư mục này nếu chưa có chỉ dẫn mới rõ ràng.
+
 | Thư mục | Nội dung |
 |---|---|
 | `controller/pi/control/` | MQTT chỉ nhận `control`, kiểm tra bản tin, cấu hình có allowlist |

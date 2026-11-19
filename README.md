@@ -112,7 +112,9 @@ terminal `gps-plan` giữ cú pháp hai điểm.
 
 Web/backend và bộ phát telemetry được triển khai riêng. Trong hệ thống
 hiện tại, reader trên Pi nhận bản sao MAVLink ở 14541 để gửi trạng thái
-lên web. Hợp đồng lệnh và telemetry được ghi trong hướng dẫn GPS và log; mã backend/gateway không nằm trong repository này.
+lên web. Hợp đồng lệnh và telemetry được ghi trong hướng dẫn GPS và log; bản gateway tải từ Pi giữ nguyên tại [uav-gateway-review/](uav-gateway-review/)
+để đối chiếu, chưa nối helper độ cao. Backend và cấu hình MQTT không nằm
+trong bản sao này.
 
 ## Kiểm thử
 

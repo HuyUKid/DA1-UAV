@@ -175,9 +175,13 @@ IPC mặc định 0,2 giây, để không giữ luồng telemetry lâu khi Fligh
 
 ### Tích hợp vào gateway trên Pi
 
-Bộ gateway thực tế ở `~/uav_gateway_code` là dự án riêng. Chưa có
-`mqtt_publisher.py`, `lac_protocol.py`, `fields.json` hay backend trong repo
-này, nên helper chưa được nối vào bản tin gửi lên web. Các bước tích hợp:
+Bộ gateway thực tế ở `~/uav_gateway_code` là thành phần triển khai riêng.
+Bản sao năm file đã tải từ Pi được giữ nguyên trong
+[`uav-gateway-review/`](../../uav-gateway-review/). Reader hiện lấy độ cao
+theo Home; bộ mã hóa chỉ gửi trường có trong `fields.json`. Ba trường mới
+của helper chưa được khai báo và sẽ bị bỏ qua nếu chỉ thêm vào snapshot.
+Backend và cấu hình MQTT thực tế chưa có trong bản sao này; helper chưa
+được nối vào bản tin gửi lên web. Các bước tích hợp:
 
 1. Đồng bộ `controller/` vào `~/uav-gps` và chạy Flight Service như hiện tại.
 2. Trong `telemetry_reader.py`, sau các import hiện có (`sys` và `Path` đã có), thêm:

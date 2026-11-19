@@ -29,6 +29,12 @@ def format_status(status):
     ned, gps, velocity, battery = ned or {}, gps or {}, velocity or {}, battery or {}
     mission = status.get('gps_mission') or {}
     plan = mission.get('plan') or {}
+    limits = mission.get('limits') or {}
+    policy = status.get('flight_policy') or {}
+    pi_speed, px4_speed = limits.get('max_speed_m_s'), mission.get('px4_xy_vel_max_m_s')
+    effective_speed = (min(pi_speed, px4_speed)
+                       if all(isinstance(value, (int, float)) and math.isfinite(value)
+                              for value in (pi_speed, px4_speed)) else None)
     target_height = plan.get('height_above_launch_m')
     if target_height is None:
         launch, target = status.get('launch_ned') or {}, status.get('target_ned') or {}
@@ -59,6 +65,22 @@ def format_status(status):
                                   target=progress.get('target_label'), speed_m_s=plan.get('speed_m_s'))),
              line('CONTROL', dict(takeoff_complete=status.get('takeoff_complete'),
                                   can_send_target=status.get('can_send_target'), locked=status.get('target_locked'))),
+             line('GPS LIMITS', dict(max_height_m=limits.get('max_height_m'),
+                                     max_speed_m_s=pi_speed, px4_xy_max_m_s=px4_speed,
+                                     effective_speed_m_s=effective_speed)),
+             line('ROUTE LIMITS', dict(takeoff_height_m=status.get('takeoff_height_m'),
+                                       start_error_m=limits.get('start_error_m'),
+                                       max_leg_m=('UNLIMITED' if 'max_leg_m' in limits
+                                                  and limits['max_leg_m'] is None
+                                                  else limits.get('max_leg_m')))),
+             line('ARRIVAL', dict(xy_tolerance_m=policy.get('xy_tolerance_m'),
+                                  z_tolerance_m=policy.get('z_tolerance_m'),
+                                  yaw_tolerance_deg=policy.get('yaw_tolerance_deg'),
+                                  settle_s=policy.get('settle_s'))),
+             line('TIMING', dict(local_target_timeout_s=policy.get('target_timeout_s'),
+                                 telemetry_max_age_s=policy.get('telemetry_max_age_s'),
+                                 sample_gap_s=policy.get('sample_gap_s'),
+                                 gps_confirmation_s=limits.get('confirmation_s'))),
              line('PI HEALTH', dict(cpu_pct=host.get('cpu_percent'), temp_c=host.get('temperature_c'),
                                     ram_used_mib=mib(memory.get('used_bytes')),
                                     ram_available_mib=mib(memory.get('available_bytes')),

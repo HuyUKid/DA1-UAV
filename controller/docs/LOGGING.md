@@ -127,10 +127,21 @@ HEALTH     all_ok=true  invalid=[]  age=0.12s
 BATTERY    percent=65.00  voltage_v=23.80  current_a=12.10  warning=NORMAL  age=0.12s
 MISSION    phase=GPS_RUNNING  points=6  target=B  speed_m_s=1.00
 CONTROL    takeoff_complete=true  can_send_target=false  locked=true
+GPS LIMITS max_height_m=7.00  max_speed_m_s=1.00  px4_xy_max_m_s=1.00  effective_speed_m_s=1.00
+ROUTE LIMITS takeoff_height_m=2.00  start_error_m=5.00  max_leg_m=UNLIMITED
+ARRIVAL    xy_tolerance_m=0.50  z_tolerance_m=0.30  yaw_tolerance_deg=10.00  settle_s=2.00
+TIMING     local_target_timeout_s=60.00  telemetry_max_age_s=1.00  sample_gap_s=0.60  gps_confirmation_s=5.00
 PI HEALTH  cpu_pct=12.50  temp_c=47.20  ram_used_mib=650.00  ram_available_mib=7100.00  disk_available_mib=38000.00
 BAT LIMITS BAT_LOW_THR=0.30  BAT_CRIT_THR=0.07  BAT_EMERGEN_THR=0.05  COM_LOW_BAT_ACT=2
 LAST_ERROR N/A
 ```
+
+Các dòng giới hạn lấy từ status đang chạy, không dùng giá trị cố định trong
+bộ hiển thị. `max_height_m` là giới hạn độ cao nhiệm vụ so với điểm cất cánh;
+`effective_speed_m_s` là min của giới hạn tốc độ GPS trên Pi và PX4.
+`max_leg_m=UNLIMITED` chỉ có nghĩa Pi không đặt giới hạn chiều dài chặng,
+không bỏ geofence hay kiểm tra khác trên PX4. `local_target_timeout_s`
+áp dụng cho mục tiêu local, không phải thời hạn cố định cho toàn tuyến GPS.
 
 ## Độ cao hiển thị trên web
 

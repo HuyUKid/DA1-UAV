@@ -35,7 +35,7 @@ class GpsLimits:
         if self.max_leg_m is not None:
             number(self.max_leg_m, 'max_leg_m', 1, 10000)
         number(self.max_height_m, 'max_height_m', 1, 100)
-        number(self.max_speed_m_s, 'max_speed_m_s', 0.1, 10)
+        number(self.max_speed_m_s, 'max_speed_m_s', 0.1, 20)
         number(self.confirmation_s, 'confirmation_s', 1, 30)
 
 

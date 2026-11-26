@@ -117,7 +117,7 @@ Tăng trần không tự tăng tốc độ của nhiệm vụ đang chọn thấ
 không phải độ cao bay thực tế. Web/terminal chọn độ cao nhiệm vụ từ
 TAKEOFF height tới trần này. Độ cao đứng theo launch, không theo địa hình.
 Tốc độ ngang không tự thay tốc độ lên/xuống. Miền cấu hình tốc độ Pi là
-0.1–10 m/s; vận hành hiện chọn trần 1 m/s.
+0.1–20 m/s cho cả HITL và hardware; mặc định vẫn chọn trần 1 m/s.
 
 ## Sau bay
 

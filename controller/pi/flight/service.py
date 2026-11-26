@@ -30,7 +30,8 @@ def build_parser():
     parser.add_argument('--height', type=float, default=2.0)
     parser.add_argument('--gps-max-leg', type=float, default=None)
     parser.add_argument('--gps-max-height', type=float, default=3.0)
-    parser.add_argument('--gps-max-speed', type=float, default=1.0)
+    parser.add_argument('--gps-max-speed', type=float, default=1.0,
+                        help='GPS speed cap, 0.1..20 m/s in either profile; default 1')
     parser.add_argument('--xy-tolerance', type=float, default=0.5)
     parser.add_argument('--z-tolerance', type=float, default=0.3)
     parser.add_argument('--yaw-tolerance', type=float, default=10.0)

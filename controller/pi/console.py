@@ -184,7 +184,7 @@ def main():
     parser.add_argument('--gps-max-height', type=float, default=3.0,
                         help='Maximum height above launch in metres for a GPS mission')
     parser.add_argument('--gps-max-speed', type=float, default=1.0,
-                        help='Maximum GPS mission speed in m/s')
+                        help='GPS speed cap, 0.1..20 m/s in either profile; default 1')
     parser.add_argument('--log-dir', default='session-logs', help='Controller diagnostic log directory')
     parser.add_argument('--enable-actuation', action='store_true')
     parser.add_argument('--check', action='store_true', help='Read state, never send flight commands')

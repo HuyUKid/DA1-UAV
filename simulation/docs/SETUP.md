@@ -479,3 +479,20 @@ trên PC/Pixhawk HITL ngày 11/11/2026; xem
 [WEB_HITL_2026-11-11.md](../../logs/2026-11-11/WEB_HITL.md). Đường Pi UART/TELEM2
 chưa được thử với bản mã này. Xem [HARDWARE_SETUP.md](../../controller/docs/HARDWARE_SETUP.md) về cách
 xem trạng thái và log.
+
+
+### Thử HITL với trần ngang 20 m/s
+
+Dùng `simulation/params/x500_hitl_20ms.params` để nạp vào Pixhawk HITL
+đang DISARM, thay cho profile HITL cơ sở. Đây là bộ overlay đầy đủ của
+profile HITL cơ sở với `MPC_XY_VEL_MAX=20`, `MPC_XY_CRUISE=20`; không
+nạp vào UAV thật. Chưa kiểm chứng bài bay ở tốc độ này. Profile cơ sở và
+hardware vẫn giữ 1 m/s; giới hạn đứng/gia tốc không thay đổi.
+
+Khởi động Flight Service với `--gps-max-speed 20`, đặt
+`--gps-max-height` phù hợp độ cao nhiệm vụ (ví dụ 5 hoặc 30 m).
+Parser MQTT nhận `c:spd:20;` trong bản tin nhiệm vụ đầy đủ; trần thực tế
+vẫn là min của trần service và `MPC_XY_VEL_MAX` đọc từ bo.
+Khởi động lại Control/Flight Service sau khi cập nhật code/tham số.
+Tuyến vài mét không đủ để đạt 20 m/s; cần kiểm tra tốc độ telemetry trên
+tuyến đủ dài. Việc có file `.params` không có nghĩa đã nạp vào bo.

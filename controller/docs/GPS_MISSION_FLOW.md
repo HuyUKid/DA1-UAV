@@ -247,7 +247,7 @@ trước TAKEOFF/upload. Start=end nhưng có điểm trung gian khác vẫn là
 bay qua các điểm rồi quay về điểm cuối.
 
 Lệnh terminal `gps-plan` vẫn nhận hai điểm; nhiệm vụ nhiều điểm đi qua web/MQTT.
-Miền parser tốc độ là 0–10 m/s; Flight Service yêu cầu tối thiểu 0,1
+Miền parser tốc độ là 0–20 m/s; Flight Service yêu cầu tối thiểu 0,1
 và áp dụng trần cấu hình. Độ cao vượt `--gps-max-height` bị từ chối.
 Giới hạn vận hành còn phụ thuộc `--gps-max-speed` và `MPC_XY_VEL_MAX`.
 Phần nhiều điểm mới được kiểm thử phần mềm với mock/IPC; chưa thử HITL/bay thật.

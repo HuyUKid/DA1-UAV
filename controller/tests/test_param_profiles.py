@@ -23,6 +23,16 @@ def parse(path):
 
 
 class ParamProfileTests(unittest.TestCase):
+    @unittest.skipUnless(SIM_PROFILE.with_name('x500_hitl_20ms.params').is_file(),
+                         'Optional high-speed HITL profile not included')
+    def test_high_speed_hitl_changes_only_horizontal_speed_values(self):
+        base = parse(SIM_PROFILE)
+        fast = parse(SIM_PROFILE.with_name('x500_hitl_20ms.params'))
+        expected = dict(base)
+        for name in ('MPC_XY_VEL_MAX', 'MPC_XY_CRUISE'):
+            expected[name] = (20.0, 9)
+        self.assertEqual(fast, expected)
+
     def test_battery_land_policy_matches_both_profiles(self):
         for path in ([REAL_PROFILE, SIM_PROFILE] if SIM_PROFILE.is_file() else [REAL_PROFILE]):
             profile = parse(path)

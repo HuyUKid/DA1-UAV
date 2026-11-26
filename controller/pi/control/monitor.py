@@ -20,7 +20,7 @@ FIELD_BOUNDS = {
     'endlat': (-90.0, 90.0),
     'endlong': (-180.0, 180.0),
     'height': (0.0, 100.0),
-    'spd': (0.0, 10.0),
+    'spd': (0.0, 20.0),
 }
 MAX_INTERMEDIATE_WAYPOINTS = 48  # 50 total, including start and end.
 MESSAGE = re.compile(r'c:([a-z][a-z0-9]*):([^;\s]+);\Z')

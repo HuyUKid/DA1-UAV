@@ -122,6 +122,12 @@ class LayoutBoundaryTests(unittest.TestCase):
 
 
 class ProtocolTests(unittest.TestCase):
+    def test_twenty_metre_speed_reaches_single_and_multi_point_commands(self):
+        for payload in (LEGACY, MULTI):
+            with self.subTest(payload=payload):
+                command = parse_control(payload.replace('spd:0.5', 'spd:20'))
+                self.assertEqual(command['params']['speed_m_s'], 20.0)
+
     def test_three_and_four_point_web_payloads_preserve_order(self):
         for count in (1, 2):
             payload = MULTI if count == 2 else MULTI.replace('wpcount:2', 'wpcount:1').replace(
@@ -148,7 +154,7 @@ class ProtocolTests(unittest.TestCase):
                 MULTI.replace('wp2lat:21.0532450', 'wp2lat:nan'),
                 MULTI.replace('wp2long:105.8927780', 'wp2long:181'),
                 MULTI + 'c:wp1lat:21.045;',
-                MULTI.replace('spd:0.5', 'spd:15')):
+                MULTI.replace('spd:0.5', 'spd:20.1')):
             with self.subTest(payload=payload), self.assertRaises(ValueError):
                 parse_control(payload)
 

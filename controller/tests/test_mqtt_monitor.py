@@ -18,9 +18,12 @@ class MqttMonitorTests(unittest.TestCase):
                 self.assertEqual(parse_control(f'c:{field}:{value};'.encode()),
                                  (field, float(value)))
 
+    def test_accepts_twenty_metre_speed(self):
+        self.assertEqual(parse_control(b'c:spd:20;'), ('spd', 20.0))
+
     def test_rejects_invalid_and_nonfinite_commands(self):
         for payload in (b'c:startlat:91;', b'c:endlong:181;', b'c:height:nan;',
-                        b'c:spd:11;', b'c:arm:1;', b'c:startlat:1;garbage',
+                        b'c:spd:20.1;', b'c:arm:1;', b'c:startlat:1;garbage',
                         b'c:startlat:1;c:endlat:2;', b'c:startlat:1', b'\xff'):
             with self.subTest(payload=payload), self.assertRaises((ValueError, UnicodeError)):
                 parse_control(payload)

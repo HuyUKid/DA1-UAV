@@ -112,9 +112,14 @@ terminal `gps-plan` giữ cú pháp hai điểm.
 
 Web/backend và bộ phát telemetry được triển khai riêng. Trong hệ thống
 hiện tại, reader trên Pi nhận bản sao MAVLink ở 14541 để gửi trạng thái
-lên web. Hợp đồng lệnh và telemetry được ghi trong hướng dẫn GPS và log; bản gateway tải từ Pi giữ nguyên tại [uav-gateway-review/](uav-gateway-review/)
-để đối chiếu, chưa nối helper độ cao. Backend và cấu hình MQTT không nằm
-trong bản sao này.
+lên web. Bản gateway tải từ Pi được đặt tại
+[uav-gateway-review/](uav-gateway-review/), cập nhật ngày 27/11/2026;
+chạy `telemetry_reading.py` để đọc thêm độ cao từ socket Flight Service.
+File này ưu tiên độ cao launch, nhưng quay lại độ cao Home nếu không đọc
+được; xem giới hạn về mốc đo trong [LOGGING.md](controller/docs/LOGGING.md).
+Config MQTT có địa chỉ broker và tên biến môi trường mật khẩu, không chứa
+mật khẩu. Backend được triển khai riêng. Luồng HITL qua Pi và gateway xem
+[SETUP.md](simulation/docs/SETUP.md#chạy-mô-phỏng-và-pi).
 
 ## Kiểm thử
 

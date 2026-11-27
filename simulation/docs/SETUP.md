@@ -409,8 +409,12 @@ Pi Flight Service là tiến trình duy nhất mở UART MAVLink. Không mở
    ```bash
    ssh pi@192.168.50.1 'mkdir -p ~/uav-gps'
    rsync -av --exclude='.venv/' --exclude='__pycache__/' \
-     --exclude='session-logs/' controller/ \
+     --exclude='session-logs/' --exclude='runtime/' controller/ \
      pi@192.168.50.1:~/uav-gps/
+   ssh pi@192.168.50.1 'mkdir -p ~/uav_gateway_code'
+   rsync -av --exclude='.venv/' --exclude='__pycache__/' \
+     --exclude='reports/' --exclude='mqtt.remote.json' \
+     uav-gateway-review/ pi@192.168.50.1:~/uav_gateway_code/
    ```
 
 5. Trên Pi:
@@ -432,6 +436,21 @@ Unit test không chứng minh UART hoặc bài bay đã đạt.
 
 ### Chạy mô phỏng và Pi
 
+Luồng web đầy đủ, gateway cũng chạy trên Pi:
+
+```text
+Web → MQTT → Control Service → Unix socket → Flight Service → PX4
+PC/Gazebo ↔ USB ↔ Pixhawk ↔ TELEM2 ↔ một MAVLink Router trên Pi
+                                      ├─ UDP 14540 → Flight Service
+                                      └─ UDP 14541 → telemetry_reading.py → MQTT → web
+```
+
+Chỉ router giữ `/dev/ttyAMA0`; Flight Service và gateway nhận hai cổng
+khác nhau. Không mở console trực tiếp trên UART trong cấu hình này.
+Gazebo vẫn giữ USB; không chạy thêm router USB trên Pi. Nếu không dùng
+gateway và chỉ thử terminal, có thể dùng Flight Service trực tiếp qua
+`serial:///dev/ttyAMA0:921600`, nhưng không chạy router UART cùng lúc.
+
 Trên PC, mở Gazebo trước:
 
 ```bash
@@ -440,18 +459,39 @@ simulation/.venv/bin/python simulation/x500/launch.py --serial auto
 ```
 
 QGC có thể mở qua UDP sau Gazebo; không để QGC chiếm USB Pixhawk mà
-simulator đang giữ. Trên Pi, terminal 1 mở flight service (lệnh dưới có
-quyền bay, chỉ dùng trong bài HITL có giám sát):
+simulator đang giữ. Trên Pi, terminal SSH 1 mở router TELEM2:
+
+```bash
+cd ~/uav-gps
+sudo bash tools/run_hardware_router.sh "${SSH_CONNECTION%% *}" /dev/ttyAMA0
+```
+
+Script giữ tên `hardware` nhưng nhận thiết bị serial dưới `/dev/`; trong
+bài này chọn UART, không chọn USB. Script yêu cầu đã cài `mavlink-routerd`.
+IP lấy từ laptop đang SSH và phải truy cập được từ Pi. Terminal 2 kiểm tra
+chỉ đọc, sau đó mở Flight Service khi kiểm tra kết thúc thành công:
+
+```bash
+cd ~/uav-gps
+.venv/bin/python pi/console.py --profile hitl \
+  --connection udpin://127.0.0.1:14540 \
+  --gps-max-height 10 --gps-max-speed 20 --check
+```
+
+Kiểm tra `SYS_HITL=1`, DISARM/ON_GROUND, health tốt và telemetry mới.
+Không chạy `--check` song song Flight Service cùng cổng 14540. Lệnh sau
+có quyền bay, chỉ dùng trong bài HITL có giám sát:
 
 ```bash
 cd ~/uav-gps
 .venv/bin/python pi/flight/service.py --profile hitl \
-  --connection serial:///dev/ttyAMA0:921600 --height 2 \
-  --gps-max-height 3 --gps-max-speed 1 \
+  --connection udpin://127.0.0.1:14540 --height 2 \
+  --gps-max-height 10 --gps-max-speed 20 \
   --socket /tmp/uav-flight.sock --enable-actuation
 ```
 
-Thay `/dev/ttyAMA0` bằng đúng UART đã kiểm tra. Ở terminal 2 trên Pi,
+Thay `/dev/ttyAMA0` trong lệnh router bằng đúng UART đã kiểm tra.
+Ở terminal 3 trên Pi,
 control service giữ MQTT và hỏi mật khẩu:
 
 ```bash
@@ -460,7 +500,32 @@ cd ~/uav-gps
   --username MQTT_USER --flight-socket /tmp/uav-flight.sock
 ```
 
-Trước khi nhấn nút web, ở terminal thứ ba mở client kỹ thuật qua IPC:
+Terminal 4 trên Pi mở gateway mới. Cài dependency một lần nếu chưa có;
+giữ venv/config đã có. Lệnh `cp -n` không ghi đè config MQTT hiện tại:
+
+```bash
+cd ~/uav_gateway_code
+if [ ! -e .venv ] && [ ! -L .venv ]; then python3 -m venv .venv; fi
+.venv/bin/python -m pip install -r requirements.txt
+cp -n mqtt.example.json mqtt.remote.json
+mkdir -p reports
+read -rsp 'Mat khau MQTT: ' MQTT_PASSWORD
+echo
+export MQTT_PASSWORD
+.venv/bin/python -u telemetry_reading.py \
+  --connection udpin:127.0.0.1:14541 \
+  --uav-id uav01 --request-streams --interval 1 \
+  --mqtt-config mqtt.remote.json --output reports/status.json --quiet
+```
+
+Gateway chỉ phát telemetry và ghi nhận control, không thực hiện lệnh bay;
+Control Service ở terminal 3 mới thực hiện đường nhận lệnh. Không mở
+gateway thứ hai cùng device ID vì trùng MQTT client ID/cổng UDP.
+Các mẫu `run_laptop.sh`/systemd đã dùng entrypoint mới và cổng 14541;
+bài HITL dưới đây chạy thủ công để theo dõi từng tiến trình. Gateway cần cùng socket
+`/tmp/uav-flight.sock` với Flight Service; bản mới chưa có tham số đổi socket.
+
+Trước khi nhấn nút web, ở terminal 5 mở client kỹ thuật qua IPC:
 
 ```bash
 cd ~/uav-gps

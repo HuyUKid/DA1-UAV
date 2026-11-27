@@ -1,0 +1,26 @@
+[Unit]
+Description=PX4 telemetry to MQTT
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=pi
+SupplementaryGroups=dialout
+WorkingDirectory=/home/pi/uav_gateway_code
+EnvironmentFile=/etc/uav/telemetry.env
+ExecStart=/home/pi/uav_gateway_code/.venv/bin/python /home/pi/uav_gateway_code/telemetry_reading.py --connection udpin:127.0.0.1:14541 --uav-id uav01 --mqtt-config /home/pi/uav_gateway_code/mqtt.remote.json --request-streams --interval 1 --output /home/pi/uav_gateway_code/reports/status.json --quiet
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=10
+KillSignal=SIGINT
+Slice=uav.slice
+Nice=0
+CPUWeight=100
+MemoryHigh=192M
+MemoryMax=256M
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -147,7 +147,7 @@ không bỏ geofence hay kiểm tra khác trên PX4. `local_target_timeout_s`
 
 ### Nguyên nhân và các mốc đo
 
-Trong bản `telemetry_reader.py` được cung cấp ngày 14/11, gateway lấy
+Gateway lấy dữ liệu độ cao theo Home từ
 `GLOBAL_POSITION_INT.relative_alt / 1000` vào `altitude_relative`.
 Trường MAVLink này là độ cao so với Home hiện tại của PX4, không bảo đảm
 trùng mốc TAKEOFF của Flight Service. Khi độ cao Home thay đổi, giá trị
@@ -184,68 +184,29 @@ status. Thiếu mốc trước TAKEOFF, service mất kết nối hoặc IPC tim
 trả null/false; không tái sử dụng độ cao của lần đọc trước. Thời gian chờ
 IPC mặc định 0,2 giây, để không giữ luồng telemetry lâu khi Flight Service bận.
 
-### Tích hợp vào gateway trên Pi
+### Gateway đang được cung cấp trên Pi
 
-Bộ gateway thực tế ở `~/uav_gateway_code` là thành phần triển khai riêng.
-Bản sao năm file đã tải từ Pi được giữ nguyên trong
-[`uav-gateway-review/`](../../uav-gateway-review/). Reader hiện lấy độ cao
-theo Home; bộ mã hóa chỉ gửi trường có trong `fields.json`. Ba trường mới
-của helper chưa được khai báo và sẽ bị bỏ qua nếu chỉ thêm vào snapshot.
-Backend và cấu hình MQTT thực tế chưa có trong bản sao này; helper chưa
-được nối vào bản tin gửi lên web. Các bước tích hợp:
+Bản sao cập nhật từ Pi ngày 27/11/2026 tại
+[`uav-gateway-review/`](../../uav-gateway-review/) giữ nguyên thuật toán reader do người phụ trách gateway cung cấp; script
+chạy và mẫu systemd đã đồng bộ. Điểm vào duy nhất `telemetry_reading.py` đọc `/tmp/uav-flight.sock`, lấy
+`height_above_launch_m` khi service connected và local NED mới không quá
+1 giây, rồi ghi đè `altitude_relative` trước khi mã hóa MQTT bằng code 28.
+Mặc định publish mỗi 2 giây; có thể đặt `--interval 1`. Reader và Flight
+Service phải chạy cùng máy để dùng socket Unix này.
 
-1. Đồng bộ `controller/` vào `~/uav-gps` và chạy Flight Service như hiện tại.
-2. Trong `telemetry_reader.py`, sau các import hiện có (`sys` và `Path` đã có), thêm:
+Đây chưa phải giao thức tách mốc đo: nếu chưa TAKEOFF, thiếu service hoặc
+không có height hợp lệ, reader quay lại `GLOBAL_POSITION_INT.relative_alt`
+theo Home. Web nhận cùng code 28 mà không có cờ phân biệt hai mốc, nên có
+thể thấy bước nhảy. Không gọi trường này là độ cao AGL. Helper bên trên
+chưa được reader mới sử dụng; phương án tách trường phía dưới vẫn là
+hướng tích hợp khác, chưa được thực hiện trong bản gateway do người khác
+phụ trách. Không sửa thuật toán gateway trong lần cập nhật bản sao này.
 
-   ```python
-   sys.path.insert(0, str(Path.home() / 'uav-gps' / 'pi'))
-   from observability.web_altitude import FlightAltitudeReader
-   ```
+`run_laptop.sh` và mẫu systemd dùng `telemetry_reading.py`, cổng 14541,
+đường dẫn triển khai Pi `~/uav_gateway_code`. Không chạy hai gateway cùng
+cổng/ID. Xem [SETUP.md](../../simulation/docs/SETUP.md#chạy-mô-phỏng-và-pi).
 
-   Dòng đầu cho Python tìm module trong code controller đã đồng bộ. Dòng
-   thứ hai nhập lớp chỉ đọc độ cao; không tạo kết nối MAVLink.
-
-3. Trong `main()`, trước vòng lặp đọc telemetry, tạo một đối tượng:
-
-   ```python
-   flight_altitude = FlightAltitudeReader('/tmp/uav-flight.sock')
-   ```
-
-   Dòng này chọn socket cùng Flight Service; nếu chạy systemd dùng
-   `/run/uav/flight.sock` thay thế.
-
-4. Ngay sau dòng `values = reader.snapshot(now, args.uav_id, sequence)`, thêm:
-
-   ```python
-   values.update(flight_altitude.snapshot())
-   ```
-
-   Dòng này thêm ba trường ở trên vào snapshot trước khi ghi JSON/publish.
-   Giữ nguyên `altitude_relative` để đối chiếu Home PX4.
-
-5. Trong `fields.json`/`lac_protocol.py` và bộ đóng gói MQTT, khai báo
-   trường mới theo định dạng gateway/backend đang dùng. Nếu giao thức dùng
-   chỉ số trường, phải thống nhất chỉ số mới ở cả hai đầu; không tự đổi nghĩa
-   chỉ số 28 (`altitude_relative`) và không chỉ thêm key rồi cho rằng nó đã
-   được truyền. Kiểm tra payload MQTT thật có các trường mới.
-6. Backend lưu các trường mới trong telemetry và lịch sử. Web dùng
-   `height_above_launch_m` với `height_above_launch_valid=true` cho bảng,
-   số giám sát và đồ thị; dùng nhãn “Độ cao so với điểm cất cánh”. Nếu
-   thiếu/null/không hợp lệ, hiện “—”; giữ khoảng trống trên đồ thị thay vì
-   vẽ 0 hoặc kéo dài mẫu cũ. Giá trị 0 thực sự vẫn là số đo hợp lệ.
-
-`altitude_agl` dùng nhãn riêng “Độ cao so với mặt đất” khi có dữ liệu hợp
-lệ; không fallback sang height trên launch rồi gán nhãn AGL.
-
-### Xác minh sau tích hợp
-
-- Đối chiếu Flight Service `status.height_above_launch_m`, JSON gateway,
-  payload MQTT, backend và web tại cùng thời điểm.
-- Home PX4 thay đổi không được làm web đổi sang `altitude_relative`.
-- Thiếu service/mốc/dữ liệu mới phải hiện chưa có dữ liệu.
-- Khi hạ cánh, tiếp tục hiển thị số đo; không tự ép về 0.
-- Lịch sử cũ chỉ lưu relative altitude không đủ để khôi phục launch height;
-  cần ULog/raw telemetry và mốc cất cánh của chuyến tương ứng.
-
-Unit test đã kiểm tra Home đổi dấu, dữ liệu cũ/NaN, thiếu launch và IPC
-timeout bằng mock. Chưa xác minh đầu cuối trên gateway/Pi/web thực tế.
+Nếu cần tách mốc đo trong tương lai, phải thêm trường launch height riêng
+trong `fields.json`, bộ đóng gói, backend và giao diện; helper phía trên
+chỉ là nguồn đọc, chưa thực hiện tích hợp này. Lịch sử chỉ có relative
+altitude không đủ để khôi phục launch height của các chuyến cũ.

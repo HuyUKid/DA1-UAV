@@ -1,0 +1,6 @@
+[Unit]
+Description=UAV companion workloads
+
+[Slice]
+CPUAccounting=yes
+MemoryAccounting=yes
